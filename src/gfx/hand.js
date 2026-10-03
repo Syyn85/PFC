@@ -55,6 +55,21 @@ export const POSES = {
     pinky: [-0.04, 1.42, 1.58, 1.1],
     thumb: [-0.22, 1.0, 0.55],
   },
+  // Poses de portrait (carte des îles)
+  point: {
+    index: [0.08, 0.02, 0.03, 0.02],
+    middle: [0, ...CURLED],
+    ring: [-0.02, ...CURLED],
+    pinky: [-0.04, 1.42, 1.58, 1.1],
+    thumb: [-0.22, 1.0, 0.55],
+  },
+  fox: {
+    index: [0.22, 0.05, 0.1, 0.05],
+    middle: [0.02, 1.15, 0.65, 0.2],
+    ring: [-0.02, 1.15, 0.65, 0.2],
+    pinky: [-0.26, 0.05, 0.1, 0.05],
+    thumb: [-0.35, 0.9, 0.2],
+  },
 };
 
 export const HAND_PALETTES = {
@@ -156,9 +171,9 @@ export class HandRig {
    * @param {'player'|'bot'} opts.team
    * @param {boolean} [opts.withArm=true] bras + manche (désactivé pour les icônes)
    */
-  constructor({ team = 'player', withArm = true } = {}) {
+  constructor({ team = 'player', withArm = true, palette = {} } = {}) {
     this.team = team;
-    this.palette = HAND_PALETTES[team];
+    this.palette = { ...HAND_PALETTES[team], ...palette };
     this.phase = team === 'player' ? 0 : 1.7;
     this.idle = 1;
     this.basePosition = new THREE.Vector3();
@@ -206,6 +221,23 @@ export class HandRig {
     };
     this.outline = { color: p.outline, thickness: 2.4 };
     this.thinOutline = { color: p.outline, thickness: 1.4 };
+  }
+
+  /** Recolore la main (changement d'adversaire). */
+  setPalette(palette = {}) {
+    this.palette = { ...HAND_PALETTES[this.team], ...palette };
+    const p = this.palette;
+    const { mats } = this;
+    mats.glove.color.set(p.glove);
+    mats.glove.userData.toon.uSpecStrength.value = p.glove_spec;
+    mats.stitch.color.set(p.stitch);
+    mats.cuff.color.set(p.cuff);
+    mats.cuffLip.color.set(p.cuffLip);
+    mats.sleeve.color.set(p.sleeve);
+    mats.sleeveDark.color.set(p.sleeveDark);
+    mats.accent.color.set(p.accent);
+    mats.led.color.set(p.accent);
+    this.ledGlow?.material.color.set(p.accent);
   }
 
   #buildHand() {
@@ -403,13 +435,13 @@ export class HandRig {
   async pump(tweens, { height = 0.3, onApex } = {}) {
     await tweens.to(
       this.motion,
-      { lift: height, wrist: 0.3 },
+      { lift: height, wrist: 0.24 },
       { duration: 0.21, ease: ease.outCubic },
     );
     onApex?.();
     await tweens.to(
       this.motion,
-      { lift: -0.05, wrist: -0.24 },
+      { lift: -0.04, wrist: -0.2 },
       { duration: 0.13, ease: ease.inQuad },
     );
     tweens.to(this.motion, { lift: 0, wrist: 0 }, { duration: 0.16, ease: ease.outQuad });
@@ -472,6 +504,18 @@ export class HandRig {
       { lift: -0.13, wrist: -0.45, drop: -0.05 },
       { duration: 0.6, ease: ease.outCubic },
     );
+  }
+
+  /** Entrée d'un nouvel adversaire : la main sort du cadre, change de couleurs et revient. */
+  async swapIn(tweens, palette) {
+    await tweens.to(
+      this.motion,
+      { push: -4.5, lift: 0.05 },
+      { duration: 0.35, ease: ease.inCubic },
+    );
+    if (palette) this.setPalette(palette);
+    this.snapPose('relaxed');
+    await tweens.to(this.motion, { push: 0, lift: 0 }, { duration: 0.6, ease: ease.outBack });
   }
 
   async recover(tweens) {

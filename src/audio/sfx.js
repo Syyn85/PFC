@@ -1,11 +1,23 @@
+import { safeStorage } from '../core/storage.js';
+
+const SFX_VOLUME = 0.55;
+
 /**
  * Effets sonores synthétisés en temps réel (Web Audio) : aucun fichier audio.
+ * Possède le contexte audio, partagé avec la musique.
  */
 export class Sfx {
   constructor() {
     this.ctx = null;
     this.master = null;
-    this.muted = readMuted();
+    this.output = null;
+    this.muted = readFlag('pfc:muted');
+    this.onUnlock = null;
+    document.addEventListener('visibilitychange', () => {
+      if (!this.ctx) return;
+      if (document.hidden) this.ctx.suspend();
+      else this.ctx.resume();
+    });
   }
 
   /** Doit être appelé suite à un geste utilisateur (politique autoplay). */
@@ -14,23 +26,23 @@ export class Sfx {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       if (!AudioCtx) return;
       this.ctx = new AudioCtx();
+      this.output = this.ctx.createDynamicsCompressor();
+      this.output.connect(this.ctx.destination);
       this.master = this.ctx.createGain();
-      this.master.gain.value = this.muted ? 0 : 0.55;
-      const comp = this.ctx.createDynamicsCompressor();
-      this.master.connect(comp).connect(this.ctx.destination);
+      this.master.gain.value = this.muted ? 0 : SFX_VOLUME;
+      this.master.connect(this.output);
       this.noiseBuffer = this.#createNoise();
+      this.onUnlock?.(this);
     }
-    if (this.ctx.state === 'suspended') this.ctx.resume();
+    if (this.ctx.state === 'suspended' && !document.hidden) this.ctx.resume();
   }
 
   setMuted(muted) {
     this.muted = muted;
-    try {
-      localStorage.setItem('pfc:muted', muted ? '1' : '0');
-    } catch {
-      /* stockage indisponible : on ignore */
+    writeFlag('pfc:muted', muted);
+    if (this.master) {
+      this.master.gain.setTargetAtTime(muted ? 0 : SFX_VOLUME, this.ctx.currentTime, 0.02);
     }
-    if (this.master) this.master.gain.setTargetAtTime(muted ? 0 : 0.55, this.ctx.currentTime, 0.02);
   }
 
   #createNoise() {
@@ -156,6 +168,43 @@ export class Sfx {
     this.#tone({ type: 'square', freq: 1318.51, start: delay + 0.07, duration: 0.3, gain: 0.08 });
   }
 
+  thunder() {
+    if (!this.#ready()) return;
+    this.#noise({ duration: 1.8, gain: 0.35, freq: 400, to: 60, q: 0.5, type: 'lowpass' });
+    this.#noise({ start: 0.05, duration: 0.25, gain: 0.25, freq: 2500, type: 'highpass' });
+  }
+
+  shield() {
+    if (!this.#ready()) return;
+    this.#tone({ type: 'triangle', freq: 1567.98, to: 1400, duration: 0.6, gain: 0.18 });
+    this.#tone({ type: 'sine', freq: 783.99, duration: 0.8, gain: 0.2 });
+    this.#noise({ duration: 0.3, gain: 0.12, freq: 6000, type: 'highpass' });
+  }
+
+  boost() {
+    if (!this.#ready()) return;
+    this.#tone({ type: 'square', freq: 660, to: 1320, duration: 0.18, gain: 0.08 });
+    this.#tone({ type: 'triangle', freq: 1320, start: 0.08, duration: 0.25, gain: 0.12 });
+  }
+
+  spy() {
+    if (!this.#ready()) return;
+    this.#noise({ duration: 0.5, gain: 0.12, freq: 300, to: 3000, q: 3 });
+    [880, 1108.73, 1318.51].forEach((f, i) =>
+      this.#tone({ type: 'sine', freq: f, start: 0.1 + i * 0.07, duration: 0.35, gain: 0.08 }),
+    );
+  }
+
+  tick(urgent = false) {
+    if (!this.#ready()) return;
+    this.#tone({ type: 'square', freq: urgent ? 1760 : 1200, duration: 0.05, gain: 0.06 });
+  }
+
+  swoosh() {
+    if (!this.#ready()) return;
+    this.#noise({ duration: 0.45, gain: 0.25, freq: 2400, to: 300, q: 0.9 });
+  }
+
   fanfare() {
     if (!this.#ready()) return;
     const notes = [523.25, 523.25, 523.25, 698.46, 880, 783.99, 1046.5];
@@ -175,10 +224,18 @@ export class Sfx {
   }
 }
 
-function readMuted() {
+export function readFlag(key) {
   try {
-    return localStorage.getItem('pfc:muted') === '1';
+    return safeStorage()?.getItem(key) === '1';
   } catch {
     return false;
+  }
+}
+
+export function writeFlag(key, value) {
+  try {
+    safeStorage()?.setItem(key, value ? '1' : '0');
+  } catch {
+    /* stockage indisponible : la préférence reste en mémoire */
   }
 }

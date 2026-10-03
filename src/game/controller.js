@@ -1,71 +1,147 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config.js';
 import { ease } from '../core/tween.js';
-import { createBot } from './bot.js';
-import { createCommitment, verifyCommitment } from './fairness.js';
+import { chooseBotBoost, createBot, spyHint } from './bot.js';
+import { createCommitment, secureRandomInt, verifyCommitment } from './fairness.js';
 import { Match, computeRoundRewards } from './match.js';
-import { MOVE_LABELS, verdictFor } from './rules.js';
+import { CAMPAIGN, QUICK_MATCH, findOpponent, nextOpponent, pickLine } from './opponents.js';
+import { CampaignProgress, DailyRewards } from './progress.js';
+import { MOVES, MOVE_LABELS, verdictFor } from './rules.js';
 
-const COUNTDOWN = ['Pierre…', 'Feuille…', 'Ciseaux !'];
-const RESULT_TITLES = { win: 'Gagné !', lose: 'Perdu…', draw: 'Égalité !' };
+const COUNTDOWN = ['Pierre…', 'Feuille…', 'Ciseaux !'];
 const IMPACT_COLORS = { win: '#ffe25a', lose: '#ff7a9c', draw: '#cdbbff' };
+const BOOST_PROMPTS = {
+  shield: 'Bouclier armé : une défaite ne comptera pas',
+  double: 'Double armé : une victoire vaudra 2 points',
+};
+const SYMBOL = CONFIG.token.symbol;
 
 /**
  * Chef d'orchestre : enchaîne les états du jeu et synchronise logique,
  * animations 3D, interface et sons.
  *
- * title → committing → choosing → resolving → (committing… | ended)
+ * title ⇄ map → starting → committing → choosing → resolving → (committing… | ended)
  */
 export class GameController {
-  constructor({ engine, tweens, player, bot, effects, hud, sfx, wallet }) {
-    Object.assign(this, { engine, tweens, player, bot, effects, hud, sfx, wallet });
+  constructor({ engine, tweens, world, player, bot, effects, hud, sfx, music, wallet, portraits }) {
+    Object.assign(this, { engine, tweens, world, player, bot, effects, hud, sfx, music, wallet });
+    this.portraits = portraits;
     this.state = 'boot';
     this.formatId = CONFIG.game.defaultFormat;
-    this.opponent = createBot({ strategy: CONFIG.game.botStrategy });
+    this.progress = new CampaignProgress(CAMPAIGN);
+    this.daily = new DailyRewards({ cap: CONFIG.rewards.dailyCap });
     this.titleBlend = { value: 1 };
+    this.def = QUICK_MATCH;
+    this.botPaletteId = QUICK_MATCH.id;
+    this.ai = null;
     this.match = null;
     this.commitment = null;
+    this.armed = null;
+    this.excluded = null;
+    this.timer = null;
+    this.bubbleTime = 0;
     this.matchEarnings = 0;
+    this.capped = false;
+    this._v = new THREE.Vector3();
 
+    const withAudio =
+      (fn) =>
+      (...args) => {
+        this.sfx.unlock();
+        fn(...args);
+      };
     hud
-      .on('play', () => this.startMatch())
-      .on('again', () => this.startMatch())
-      .on('menu', () => this.enterTitle())
+      .on(
+        'openMap',
+        withAudio(() => this.openMap()),
+      )
+      .on(
+        'closeMap',
+        withAudio(() => this.enterTitle()),
+      )
+      .on(
+        'island',
+        withAudio((id) => this.startMatch(findOpponent(id))),
+      )
+      .on(
+        'quickMatch',
+        withAudio(() => this.startMatch(QUICK_MATCH)),
+      )
+      .on(
+        'again',
+        withAudio(() => this.startMatch(this.def)),
+      )
+      .on(
+        'next',
+        withAudio(() => this.startMatch(nextOpponent(this.def.id))),
+      )
+      .on(
+        'menu',
+        withAudio(() => (this.def === QUICK_MATCH ? this.enterTitle() : this.openMap())),
+      )
       .on('choose', (move) => this.choose(move))
+      .on('boost', (kind) => this.useBoost(kind))
       .on('hover', () => this.sfx.hover())
-      .on('format', (id) => {
-        this.formatId = id;
-        this.sfx.unlock();
-        this.sfx.click();
-      })
-      .on('sound', () => {
-        this.sfx.unlock();
-        this.sfx.setMuted(!this.sfx.muted);
-        this.hud.setSound(!this.sfx.muted);
-        this.sfx.click();
-      })
-      .on('wallet', () => {
-        this.sfx.unlock();
-        this.sfx.click();
-        this.hud.toast(
-          `Jetons de démo, conservés sur cet appareil. La connexion à ${CONFIG.chain.name} arrivera dans une prochaine version.`,
-        );
-      });
+      .on(
+        'format',
+        withAudio((id) => {
+          this.formatId = id;
+          this.sfx.click();
+        }),
+      )
+      .on(
+        'sound',
+        withAudio(() => {
+          this.sfx.setMuted(!this.sfx.muted);
+          this.hud.setSound(!this.sfx.muted);
+          this.sfx.click();
+        }),
+      )
+      .on(
+        'music',
+        withAudio(() => {
+          this.music.setMuted(!this.music.muted);
+          this.hud.setMusic(!this.music.muted);
+          this.sfx.click();
+        }),
+      )
+      .on(
+        'wallet',
+        withAudio(() => {
+          this.sfx.click();
+          this.hud.toast(
+            `Jetons de démo, conservés sur cet appareil. Gains du jour contre l'IA : ` +
+              `${this.daily.earnedToday} / ${this.daily.cap} ${SYMBOL}. ` +
+              `La connexion à ${CONFIG.chain.name} arrivera dans une prochaine version.`,
+          );
+        }),
+      );
 
+    world.onLightning = () => this.sfx.thunder();
     wallet.subscribe((w) => this.hud.setBalance(w.balance));
     hud.setFormats(CONFIG.game.formats);
     hud.setFormat(this.formatId);
+    hud.setSound(!sfx.muted);
+    hud.setMusic(!music.muted);
   }
+
+  // --- Navigation ---------------------------------------------------------------
 
   enterTitle() {
     this.state = 'title';
     const { hud, tweens } = this;
-    hud.showTitle(true);
+    hud.showTitle(true, {
+      progress: `${this.progress.clearedCount} / ${CAMPAIGN.length} îles libérées`,
+    });
+    hud.showMap(false);
     hud.showHud(false);
     hud.showChoices(false);
     hud.hideEnd();
     hud.hideRoundResult();
+    hud.hideVersus();
     hud.clearCallout();
+    this.music.setIntensity(0);
+    this.world.setTheme('crepuscule');
     this.player.setPose(tweens, 'relaxed', { duration: 0.5, easing: ease.outCubic });
     this.bot.setPose(tweens, 'relaxed', { duration: 0.5, easing: ease.outCubic });
     this.player.recover(tweens);
@@ -73,54 +149,161 @@ export class GameController {
     tweens.to(this.titleBlend, { value: 1 }, { duration: 1.2, ease: ease.inOutCubic });
   }
 
-  async startMatch() {
+  openMap() {
     if (!['title', 'ended'].includes(this.state)) return;
-    this.state = 'starting';
-    const { hud, sfx, tweens } = this;
-    sfx.unlock();
-    sfx.click();
-
-    const format = CONFIG.game.formats.find((f) => f.id === this.formatId);
-    this.match = new Match({ winsNeeded: format.winsNeeded });
-    this.matchEarnings = 0;
-
+    this.state = 'map';
+    this.sfx.click();
+    const { hud, progress } = this;
+    let nextMarked = false;
+    const entries = CAMPAIGN.map((opponent, i) => {
+      const cleared = progress.isCleared(opponent.id);
+      const state = cleared ? 'cleared' : progress.isUnlocked(opponent.id) ? 'open' : 'locked';
+      const isNext = state === 'open' && !nextMarked;
+      if (isNext) nextMarked = true;
+      return {
+        opponent,
+        portrait: this.portraits[opponent.id],
+        state,
+        isNext,
+        lockedBy: CAMPAIGN[i - 1]?.name,
+      };
+    });
+    hud.renderMap(entries, { symbol: SYMBOL });
     hud.showTitle(false);
     hud.hideEnd();
+    hud.showHud(false);
+    hud.showMap(true);
+    this.tweens.to(this.titleBlend, { value: 1 }, { duration: 1.2, ease: ease.inOutCubic });
+  }
+
+  // --- Match --------------------------------------------------------------------
+
+  async startMatch(def) {
+    if (!def || !['title', 'map', 'ended'].includes(this.state)) return;
+    if (def !== QUICK_MATCH && !this.progress.isUnlocked(def.id)) return;
+    this.state = 'starting';
+    const { hud, sfx, tweens, bot, world } = this;
+    sfx.click();
+    this.music.start();
+    this.music.setIntensity(1);
+
+    const winsNeeded =
+      def.winsNeeded ?? CONFIG.game.formats.find((f) => f.id === this.formatId).winsNeeded;
+    this.def = def;
+    this.ai = createBot({ strategy: def.strategy });
+    this.match = new Match({ winsNeeded, botBoosts: def.botBoosts });
+    this.matchEarnings = 0;
+    this.capped = false;
+
+    hud.showTitle(false);
+    hud.showMap(false);
+    hud.hideEnd();
+    hud.hideRoundResult();
     hud.showHud(true);
+    hud.setOpponentName(def.name);
     hud.setScore(0, 0);
     hud.setRound(1, []);
     hud.setStreak(0);
+    hud.setBotBoosts(def.botBoosts, this.match.boosts.bot);
+    world.setTheme(def.theme);
     tweens.to(this.titleBlend, { value: 0 }, { duration: 1.1, ease: ease.inOutCubic });
+
+    if (this.botPaletteId !== def.id) {
+      this.botPaletteId = def.id;
+      sfx.swoosh();
+      await bot.swapIn(tweens, def.palette);
+    }
+
+    hud.showVersus({
+      island: def.island
+        ? `Île ${def.island} · ${winsNeeded} manches gagnantes`
+        : `Partie rapide · ${winsNeeded} manches gagnantes`,
+      name: def.name,
+      title: def.title,
+    });
+    this.#say('intro');
+    await tweens.wait(1.7);
+    hud.hideVersus();
     await this.nextRound();
   }
 
   async nextRound() {
     this.state = 'committing';
-    const { hud, tweens, player, bot } = this;
+    const { hud, tweens, player, bot, match } = this;
     hud.hideRoundResult();
     hud.clearCallout();
+    hud.markExcluded(null);
+    this.armed = null;
+    this.excluded = null;
     await Promise.all([player.recover(tweens), bot.recover(tweens)]);
     player.setPose(tweens, 'rock', { duration: 0.35 });
     bot.setPose(tweens, 'rock', { duration: 0.35 });
 
-    // L'IA choisit et s'engage AVANT que le joueur ne voie les cartes.
+    // L'IA choisit son coup ET son atout, puis s'engage AVANT que le joueur ne voie les cartes.
     bot.motion.glow = 1;
     tweens.to(bot.motion, { glow: 0.15 }, { duration: 1.2, ease: ease.outCubic });
-    this.commitment = await createCommitment(this.opponent.pick());
+    const botBoost = chooseBotBoost({
+      available: match.boosts.bot,
+      playerScore: match.playerScore,
+      botScore: match.botScore,
+      winsNeeded: match.winsNeeded,
+    });
+    this.commitment = await createCommitment(this.ai.pick(), { boost: botBoost });
 
     hud.setFairness({ hash: this.commitment.hash });
-    hud.setRound(this.match.roundNumber, this.match.rounds);
+    hud.setRound(match.roundNumber, match.rounds);
+    hud.setPrompt('Choisis ton coup');
+    this.#refreshBoosts();
+    const seconds = this.def.timer;
+    this.timer = seconds
+      ? { total: seconds, remaining: seconds, lastTick: Math.ceil(seconds) }
+      : null;
+    hud.setTimer(this.timer ? 1 : null);
     this.state = 'choosing';
     hud.showChoices(true);
   }
 
-  async choose(move) {
+  useBoost(kind) {
+    if (this.state !== 'choosing' || !this.match.canUse('player', kind)) return;
+    const { hud, sfx, match } = this;
+    if (kind === 'spy') {
+      match.consume('player', 'spy');
+      this.excluded = spyHint(this.commitment.move);
+      hud.markExcluded(this.excluded);
+      hud.setPrompt(`L'Espion a vu : ${this.def.name} ne joue pas ${MOVE_LABELS[this.excluded]}`);
+      sfx.spy();
+    } else {
+      this.armed = this.armed === kind ? null : kind;
+      hud.setPrompt(this.armed ? BOOST_PROMPTS[this.armed] : 'Choisis ton coup');
+      sfx.boost();
+    }
+    this.#refreshBoosts();
+  }
+
+  #refreshBoosts() {
+    const left = this.match.boosts.player;
+    this.hud.setBoosts({
+      shield: { count: left.shield, armed: this.armed === 'shield' },
+      double: { count: left.double, armed: this.armed === 'double' },
+      spy: { count: left.spy },
+    });
+  }
+
+  async choose(move, { auto = false } = {}) {
     if (this.state !== 'choosing') return;
     this.state = 'resolving';
-    const { hud, sfx, tweens, player, bot, engine, effects, commitment } = this;
-    sfx.unlock();
-    sfx.click();
+    const { hud, sfx, tweens, player, bot, engine, effects, commitment, def } = this;
+    this.timer = null;
+    hud.setTimer(null);
     hud.showChoices(false);
+    hud.hideBubble();
+    if (auto) {
+      hud.callout('Trop lent !');
+      sfx.lose();
+      await tweens.wait(0.7);
+    } else {
+      sfx.click();
+    }
 
     // "Pierre… Feuille… Ciseaux !" : trois coups de poing, révélation au troisième
     for (let i = 0; i < COUNTDOWN.length; i++) {
@@ -134,8 +317,8 @@ export class GameController {
           }
         : undefined;
       await Promise.all([
-        player.pump(tweens, { height: last ? 0.27 : 0.22, onApex }),
-        bot.pump(tweens, { height: last ? 0.27 : 0.22 }),
+        player.pump(tweens, { height: last ? 0.15 : 0.12, onApex }),
+        bot.pump(tweens, { height: last ? 0.15 : 0.12 }),
       ]);
       if (!last) {
         sfx.thump(1 + i * 0.12);
@@ -145,11 +328,14 @@ export class GameController {
     }
 
     // Impact !
-    const round = this.match.playRound(move, commitment.move);
-    this.opponent.observe(move);
-    const impactAt = player
-      .getFrontPosition(new THREE.Vector3())
-      .lerp(bot.getFrontPosition(new THREE.Vector3()), 0.5);
+    const round = this.match.playRound(move, commitment.move, {
+      playerBoost: this.armed,
+      botBoost: commitment.boost,
+    });
+    this.ai.observe(move, commitment.move);
+    const playerFront = player.getFrontPosition(new THREE.Vector3());
+    const botFront = bot.getFrontPosition(new THREE.Vector3());
+    const impactAt = playerFront.clone().lerp(botFront, 0.5);
     impactAt.y += 0.15;
     sfx.impact();
     engine.addShake(0.55);
@@ -157,6 +343,7 @@ export class GameController {
       color: IMPACT_COLORS[round.outcome],
       strength: round.outcome === 'draw' ? 0.6 : 1,
     });
+    this.#boostEffects(round, playerFront, botFront);
 
     const verified = await verifyCommitment(commitment);
     hud.setFairness({ ...commitment, verified });
@@ -165,48 +352,76 @@ export class GameController {
     hud.clearCallout();
     this.#playOutcome(round);
 
-    const rewards = computeRoundRewards(round, CONFIG.rewards);
     hud.setScore(round.playerScore, round.botScore, {
-      bumped: { win: 'player', lose: 'bot' }[round.outcome] ?? null,
+      bumped: round.playerPoints > 0 ? 'player' : round.botPoints > 0 ? 'bot' : null,
     });
     hud.setRound(round.number, this.match.rounds);
     hud.setStreak(round.streak);
+    hud.setBotBoosts(def.botBoosts, this.match.boosts.bot);
+
+    const rewards = computeRoundRewards(round, CONFIG.rewards);
+    const granted = rewards.total > 0 ? this.daily.grant(rewards.total) : 0;
+    if (granted < rewards.total) this.capped = true;
+    const { title, tone } = resultHeadline(round);
+    const notes = boostNotes(round, def.name);
     hud.showRoundResult({
-      outcome: round.outcome,
-      title: RESULT_TITLES[round.outcome],
+      outcome: tone,
+      title,
       sub:
         verdictFor(round.playerMove, round.botMove) ??
         `${MOVE_LABELS[round.playerMove]} contre ${MOVE_LABELS[round.botMove]}, on rejoue`,
-      reward: rewards.total > 0 ? rewardLabel(rewards) : null,
+      boostNote: notes.text,
+      boostSide: notes.side,
+      reward:
+        granted > 0
+          ? rewardLabel(granted, rewards)
+          : rewards.total > 0
+            ? 'Plafond du jour atteint'
+            : null,
     });
+    if (round.botPoints > 0 && !round.matchOver) this.#say('roundWin');
+    else if (round.playerPoints > 0 && !round.matchOver) this.#say('roundLose');
 
-    if (rewards.total > 0) {
-      this.matchEarnings += rewards.total;
-      effects.coinShower(
-        player.getFrontPosition(new THREE.Vector3()),
-        Math.min(6 + rewards.total, 24),
-      );
+    if (granted > 0) {
+      this.matchEarnings += granted;
+      effects.coinShower(playerFront, Math.min(6 + granted, 24));
       for (let i = 0; i < 3; i++) sfx.coin(0.25 + i * 0.12);
       await tweens.wait(0.5);
-      this.wallet.credit(rewards.total, rewards.items.map((item) => item.label).join(', '));
+      this.wallet.credit(granted, rewards.items.map((item) => item.label).join(', '));
       hud.setBalance(this.wallet.balance, { bump: true });
     }
 
-    await tweens.wait(round.matchOver ? 1.1 : 1.7);
+    await tweens.wait(round.matchOver ? 1.1 : 1.8);
     if (round.matchOver) await this.endMatch(round);
     else await this.nextRound();
   }
 
+  #boostEffects(round, playerFront, botFront) {
+    const { effects, sfx } = this;
+    const above = (v) => v.clone().add(new THREE.Vector3(0, 0.9, 0));
+    if (round.blockedBy) {
+      const front = round.blockedBy === 'player' ? playerFront : botFront;
+      effects.shieldBlock(front);
+      effects.badge('Bloqué !', above(front), { fill: '#7fe7ff' });
+      sfx.shield();
+    }
+    if (round.playerPoints === 2) effects.badge('×2', above(playerFront));
+    if (round.botPoints === 2) effects.badge('×2', above(botFront), { fill: '#ff7a9c' });
+  }
+
   #playOutcome(round) {
     const { tweens, sfx, player, bot } = this;
-    if (round.outcome === 'win') {
+    if (round.playerPoints > 0) {
       sfx.win();
       player.lunge(tweens);
       bot.recoil(tweens);
-    } else if (round.outcome === 'lose') {
+    } else if (round.botPoints > 0) {
       sfx.lose();
       bot.lunge(tweens);
       player.recoil(tweens);
+    } else if (round.blockedBy) {
+      // Le coup gagnant rebondit sur le bouclier
+      (round.blockedBy === 'player' ? bot : player).lunge(tweens);
     } else {
       sfx.draw();
       player.recoil(tweens);
@@ -216,9 +431,18 @@ export class GameController {
 
   async endMatch(round) {
     this.state = 'ended';
-    const { hud, sfx, tweens, player, bot, effects, match } = this;
+    const { hud, sfx, tweens, player, bot, effects, match, def } = this;
     const won = round.winner === 'player';
+    const campaign = def !== QUICK_MATCH;
     hud.hideRoundResult();
+    this.music.setIntensity(0);
+
+    let bonus = null;
+    if (won && campaign && this.progress.markCleared(def.id)) {
+      this.wallet.credit(def.firstClear, `Île ${def.island} libérée`);
+      hud.setBalance(this.wallet.balance, { bump: true });
+      bonus = `Île libérée ! +${def.firstClear} ${SYMBOL}`;
+    }
 
     if (won) {
       sfx.fanfare();
@@ -230,22 +454,43 @@ export class GameController {
       bot.celebrate(tweens);
       player.slump(tweens);
     }
+    this.#say(won ? 'matchLose' : 'matchWin');
+    // Laisse le temps de savourer la célébration (et la réplique) avant le bilan
+    await tweens.wait(1.8);
+    hud.hideBubble();
 
-    const roundsWon = match.rounds.filter((r) => r.outcome === 'win').length;
+    const next = campaign && won ? nextOpponent(def.id) : null;
+    const roundsWon = match.rounds.filter((r) => r.playerPoints > 0).length;
+    const ending = campaign && won && !next;
     hud.showEnd({
       won,
-      title: won ? 'Victoire !' : 'Défaite…',
+      title: ending ? 'Tour des îles terminé !' : won ? 'Victoire !' : 'Défaite…',
       sub: won
-        ? `Tu bats l'IA ${match.playerScore} à ${match.botScore}`
-        : `L'IA l'emporte ${match.botScore} à ${match.playerScore}`,
+        ? `Tu bats ${def.name} ${match.playerScore} à ${match.botScore}`
+        : `${def.name} l'emporte ${match.botScore} à ${match.playerScore}`,
       stats: [
         ['Manches', match.rounds.length],
         ['Gagnées', roundsWon],
         ['Série max', match.bestStreak],
       ],
-      reward:
-        this.matchEarnings > 0 ? `+${this.matchEarnings} ${CONFIG.token.symbol} gagnés` : null,
+      bonus,
+      reward: this.matchEarnings > 0 ? `+${this.matchEarnings} ${SYMBOL} gagnés` : null,
+      note: this.capped
+        ? `Plafond quotidien atteint (${this.daily.cap} ${SYMBOL} contre l'IA). Les bonus d'île restent acquis.`
+        : null,
+      hint: won ? null : def.tell,
+      nextVisible: Boolean(next),
+      menuLabel: campaign ? 'Carte des îles' : 'Menu',
     });
+  }
+
+  // --- Boucle -------------------------------------------------------------------
+
+  #say(event) {
+    const line = pickLine(this.def, event);
+    if (!line) return;
+    this.hud.showBubble(this.def.name, line);
+    this.bubbleTime = 2.6;
   }
 
   update(dt, time) {
@@ -254,11 +499,84 @@ export class GameController {
     rig.orbit = blend * Math.sin(time * 0.12) * 0.32;
     rig.zoom = 1 + blend * 0.32;
     rig.lift = blend * 0.55;
+
+    // Chronomètre de choix
+    if (this.timer && this.state === 'choosing') {
+      const timer = this.timer;
+      timer.remaining -= dt;
+      const urgent = timer.remaining <= 2;
+      this.hud.setTimer(timer.remaining / timer.total, { urgent });
+      const second = Math.ceil(timer.remaining);
+      if (second < timer.lastTick) {
+        timer.lastTick = second;
+        if (second <= 3 && second > 0) this.sfx.tick(urgent);
+      }
+      if (timer.remaining <= 0) this.choose(MOVES[secureRandomInt(MOVES.length)], { auto: true });
+    }
+
+    // Bulle de dialogue accrochée à la main adverse
+    if (this.hud.bubbleVisible) {
+      this.bubbleTime -= dt;
+      if (this.bubbleTime <= 0) {
+        this.hud.hideBubble();
+      } else {
+        const anchor = this.bot.getFrontPosition(this._v);
+        anchor.y += 0.75;
+        anchor.project(this.engine.camera);
+        this.hud.positionBubble(
+          ((anchor.x + 1) / 2) * window.innerWidth,
+          ((1 - anchor.y) / 2) * window.innerHeight,
+        );
+      }
+    }
   }
 }
 
-function rewardLabel(rewards) {
+function resultHeadline(round) {
+  if (round.playerPoints > 0) return { title: 'Gagné !', tone: 'win' };
+  if (round.botPoints > 0) return { title: 'Perdu…', tone: 'lose' };
+  if (round.blockedBy === 'player') return { title: 'Paré !', tone: 'draw' };
+  if (round.blockedBy === 'bot') return { title: 'Bloqué !', tone: 'lose' };
+  return { title: 'Égalité !', tone: 'draw' };
+}
+
+/** Phrase expliquant l'effet (ou le gâchis) des atouts de la manche. */
+function boostNotes(round, name) {
+  const notes = [];
+  let side = 'player';
+  const { playerBoost, botBoost } = round;
+  if (playerBoost === 'shield') {
+    notes.push(
+      round.blockedBy === 'player'
+        ? 'Ton Bouclier a encaissé le coup'
+        : "Ton Bouclier n'a pas servi",
+    );
+  }
+  if (playerBoost === 'double') {
+    notes.push(round.playerPoints === 2 ? 'Double : 2 points !' : "Ton Double n'a pas servi");
+  }
+  if (botBoost === 'shield') {
+    side = 'bot';
+    notes.push(
+      round.blockedBy === 'bot'
+        ? `Bouclier de ${name} : ta victoire ne compte pas`
+        : `${name} a gâché son Bouclier`,
+    );
+  }
+  if (botBoost === 'double') {
+    side = 'bot';
+    notes.push(
+      round.botPoints === 2
+        ? `Double de ${name} : 2 points pour lui`
+        : `${name} a gâché son Double`,
+    );
+  }
+  return { text: notes.length ? notes.join(' · ') : null, side };
+}
+
+function rewardLabel(granted, rewards) {
   const detail =
     rewards.items.length > 1 ? ` (${rewards.items.map((i) => i.label).join(' + ')})` : '';
-  return `+${rewards.total} ${CONFIG.token.symbol}${detail}`;
+  const capped = granted < rewards.total ? ' · plafond du jour atteint' : '';
+  return `+${granted} ${SYMBOL}${granted === rewards.total ? detail : capped}`;
 }

@@ -1,5 +1,13 @@
 const $ = (selector) => document.querySelector(selector);
 const KEY_TO_MOVE = { 1: 'rock', 2: 'paper', 3: 'scissors', p: 'rock', f: 'paper', c: 'scissors' };
+const KEY_TO_BOOST = { b: 'shield', d: 'double', e: 'spy' };
+
+const create = (tag, className, text) => {
+  const el = document.createElement(tag);
+  if (className) el.className = className;
+  if (text !== undefined) el.textContent = text;
+  return el;
+};
 
 /** Interface DOM superposée à la scène 3D. Ne contient aucune règle du jeu. */
 export class Hud {
@@ -7,39 +15,64 @@ export class Hud {
     this.el = {
       loader: $('#loader'),
       title: $('#screen-title'),
+      campaign: $('#campaign-btn'),
+      campaignProgress: $('#campaign-progress'),
       play: $('#play-btn'),
       formatPicker: $('#format-picker'),
       formats: [],
+      map: $('#screen-map'),
+      mapBack: $('#map-back'),
+      islands: $('#island-list'),
       hud: $('#hud'),
       scorePlayer: $('#score-player'),
       scoreBot: $('#score-bot'),
+      botName: $('#bot-name'),
       roundLabel: $('#round-label'),
       pips: $('#pips'),
       streak: $('#streak'),
+      botBoosts: $('#bot-boosts'),
       fairPill: $('#fair-pill'),
       fairText: $('#fair-text'),
       fairPanel: $('#fair-panel'),
       fairHash: $('#fair-hash'),
       fairMove: $('#fair-move'),
+      fairBoost: $('#fair-boost'),
       fairSalt: $('#fair-salt'),
+      bubble: $('#bubble'),
+      bubbleName: $('#bubble-name'),
+      bubbleText: $('#bubble-text'),
       callout: $('#callout'),
+      versus: $('#versus'),
+      versusIsland: $('#versus-island'),
+      versusName: $('#versus-name'),
+      versusTitle: $('#versus-title'),
       result: $('#round-result'),
       resultTitle: $('#result-title'),
       resultSub: $('#result-sub'),
+      resultBoost: $('#result-boost'),
       resultReward: $('#result-reward'),
       choices: $('#choices'),
+      prompt: $('#choices-prompt'),
+      boosts: [...document.querySelectorAll('.boost')],
+      timer: $('#timer'),
+      timerFill: $('#timer-fill'),
       cards: [...document.querySelectorAll('.card')],
       end: $('#screen-end'),
       endCard: document.querySelector('.end-card'),
       endTitle: $('#end-title'),
       endSub: $('#end-sub'),
       endStats: $('#end-stats'),
+      endBonus: $('#end-bonus'),
       endReward: $('#end-reward'),
+      endNote: $('#end-note'),
+      endHint: $('#end-hint'),
+      next: $('#next-btn'),
       again: $('#again-btn'),
       menu: $('#menu-btn'),
       wallet: $('#wallet-chip'),
       balance: $('#wallet-balance'),
       sound: $('#sound-toggle'),
+      music: $('#music-toggle'),
       toast: $('#toast'),
     };
     this.handlers = {};
@@ -58,11 +91,24 @@ export class Hud {
 
   #bind() {
     const { el } = this;
-    el.play.addEventListener('click', () => this.#emit('play'));
-    el.again.addEventListener('click', () => this.#emit('again'));
-    el.menu.addEventListener('click', () => this.#emit('menu'));
-    el.wallet.addEventListener('click', () => this.#emit('wallet'));
-    el.sound.addEventListener('click', () => this.#emit('sound'));
+    const clicks = {
+      campaign: 'openMap',
+      play: 'quickMatch',
+      mapBack: 'closeMap',
+      next: 'next',
+      again: 'again',
+      menu: 'menu',
+      wallet: 'wallet',
+      sound: 'sound',
+      music: 'music',
+    };
+    for (const [key, event] of Object.entries(clicks)) {
+      el[key].addEventListener('click', () => this.#emit(event));
+    }
+    el.islands.addEventListener('click', (event) => {
+      const island = event.target.closest('.island');
+      if (island && !island.disabled) this.#emit('island', island.dataset.id);
+    });
     for (const card of el.cards) {
       card.addEventListener(
         'click',
@@ -73,6 +119,12 @@ export class Hud {
         () => this.choosing && this.#emit('hover', card.dataset.move),
       );
     }
+    for (const boost of el.boosts) {
+      boost.addEventListener(
+        'click',
+        () => this.choosing && this.#emit('boost', boost.dataset.boost),
+      );
+    }
     el.fairPill.addEventListener('click', () => {
       const open = el.fairPanel.hidden;
       el.fairPanel.hidden = !open;
@@ -80,19 +132,52 @@ export class Hud {
     });
     window.addEventListener('keydown', (event) => {
       if (event.repeat || event.metaKey || event.ctrlKey || event.altKey) return;
-      const move = KEY_TO_MOVE[event.key.toLowerCase()];
-      if (move && this.choosing) {
+      const key = event.key.toLowerCase();
+      if (this.choosing && KEY_TO_MOVE[key]) {
         event.preventDefault();
-        this.#emit('choose', move);
-      } else if (event.key === 'Enter' && !el.title.hidden) {
+        this.#emit('choose', KEY_TO_MOVE[key]);
+      } else if (this.choosing && KEY_TO_BOOST[key]) {
         event.preventDefault();
-        this.#emit('play');
+        this.#emit('boost', KEY_TO_BOOST[key]);
+      } else if (key === 'enter' && !el.title.hidden) {
+        event.preventDefault();
+        this.#emit('openMap');
+      } else if (key === 'escape' && !el.map.hidden) {
+        event.preventDefault();
+        this.#emit('closeMap');
       }
     });
   }
 
   ready() {
     this.el.loader.classList.add('is-done');
+  }
+
+  // --- Barre du haut ---
+
+  setSound(on) {
+    this.el.sound.setAttribute('aria-pressed', String(on));
+    this.el.sound.setAttribute(
+      'aria-label',
+      on ? 'Effets sonores activés' : 'Effets sonores coupés',
+    );
+  }
+
+  setMusic(on) {
+    this.el.music.setAttribute('aria-pressed', String(on));
+    this.el.music.setAttribute('aria-label', on ? 'Musique activée' : 'Musique coupée');
+  }
+
+  setBalance(value, { bump = false } = {}) {
+    this.el.balance.textContent = value.toLocaleString('fr-FR');
+    if (bump) restartAnimation(this.el.wallet, 'is-bumped');
+  }
+
+  // --- Écran titre & carte ---
+
+  showTitle(visible, { progress = '' } = {}) {
+    this.el.title.hidden = !visible;
+    this.el.campaignProgress.textContent = progress;
   }
 
   setCardArt(icons) {
@@ -105,16 +190,11 @@ export class Hud {
   /** Crée les boutons de format à partir de la configuration. */
   setFormats(formats) {
     this.el.formats = formats.map((format) => {
-      const chip = document.createElement('button');
+      const chip = create('button', 'chip');
       chip.type = 'button';
-      chip.className = 'chip';
       chip.dataset.format = format.id;
       chip.setAttribute('role', 'radio');
-      const short = document.createElement('strong');
-      short.textContent = format.short;
-      const label = document.createElement('span');
-      label.textContent = format.label;
-      chip.append(short, label);
+      chip.append(create('strong', '', format.short), create('span', '', format.label));
       chip.addEventListener('click', () => {
         this.setFormat(format.id);
         this.#emit('format', format.id);
@@ -130,31 +210,86 @@ export class Hud {
     }
   }
 
-  setSound(on) {
-    this.el.sound.setAttribute('aria-pressed', String(on));
-    this.el.sound.setAttribute('aria-label', on ? 'Son activé' : 'Son coupé');
+  showMap(visible) {
+    this.el.map.hidden = !visible;
+    if (visible) {
+      const target =
+        this.el.islands.querySelector('.island.is-next') ??
+        this.el.islands.querySelector('.island');
+      target?.focus({ preventScroll: true });
+    }
   }
 
-  setBalance(value, { bump = false } = {}) {
-    this.el.balance.textContent = value.toLocaleString('fr-FR');
-    if (bump) restartAnimation(this.el.wallet, 'is-bumped');
+  /** entries : [{ opponent, portrait, state: 'locked'|'open'|'cleared', isNext, lockedBy }] */
+  renderMap(entries, { symbol }) {
+    this.el.islands.replaceChildren(
+      ...entries.map(({ opponent, portrait, state, isNext, lockedBy }) => {
+        const li = create('li');
+        const button = create('button', `island is-${state}${isNext ? ' is-next' : ''}`);
+        button.type = 'button';
+        button.dataset.id = opponent.id;
+        button.disabled = state === 'locked';
+        button.style.setProperty('--tone', opponent.palette.cuff ?? '#cdbbff');
+
+        const img = create('img', 'island-portrait');
+        img.alt = '';
+        img.src = portrait;
+        const tags = create('span', 'island-tags');
+        tags.append(create('span', 'tag', `${opponent.winsNeeded} manches gagnantes`));
+        if (opponent.timer) tags.append(create('span', 'tag', `Chrono ${opponent.timer} s`));
+        const boosts = Object.entries(opponent.botBoosts)
+          .filter(([, n]) => n > 0)
+          .map(([kind]) => (kind === 'shield' ? 'Bouclier' : 'Double'));
+        if (boosts.length) {
+          tags.append(create('span', 'tag tag-boss', `Atouts : ${boosts.join(', ')}`));
+        }
+
+        const status = {
+          locked: `Bats ${lockedBy} pour débloquer`,
+          open: `Première victoire : +${opponent.firstClear} ${symbol}`,
+          cleared: 'Île libérée ✓',
+        }[state];
+
+        button.append(
+          img,
+          create('span', 'island-num', `Île ${opponent.island}`),
+          create('span', 'island-name', opponent.name),
+          create('span', 'island-title', opponent.title),
+          tags,
+          create('span', 'island-status', status),
+        );
+        li.append(button);
+        return li;
+      }),
+    );
   }
 
-  showTitle(visible) {
-    this.el.title.hidden = !visible;
-  }
+  // --- HUD de match ---
 
   showHud(visible) {
     this.el.hud.hidden = !visible;
     if (!visible) {
       this.el.fairPanel.hidden = true;
       this.el.fairPill.setAttribute('aria-expanded', 'false');
+      this.hideBubble();
     }
   }
 
-  showChoices(visible) {
-    this.choosing = visible;
-    this.el.choices.hidden = !visible;
+  setOpponentName(name) {
+    this.el.botName.textContent = name;
+  }
+
+  /** Atouts de l'IA (montrés pour que le joueur puisse anticiper). */
+  setBotBoosts(initial, remaining) {
+    const kinds = Object.entries(initial).filter(([, n]) => n > 0);
+    this.el.botBoosts.hidden = kinds.length === 0;
+    if (!kinds.length) return;
+    const icons = kinds.map(([kind]) => {
+      const icon = create('span', `mini-boost is-${kind}${remaining[kind] > 0 ? '' : ' is-used'}`);
+      icon.title = kind === 'shield' ? 'Bouclier' : 'Double';
+      return icon;
+    });
+    this.el.botBoosts.replaceChildren(create('span', '', 'Atouts IA'), ...icons);
   }
 
   setScore(player, bot, { bumped = null } = {}) {
@@ -168,9 +303,8 @@ export class Hud {
     this.el.roundLabel.textContent = `Manche ${number}`;
     this.el.pips.replaceChildren(
       ...history.map((round) => {
-        const pip = document.createElement('span');
-        pip.className = `pip is-${round.outcome}`;
-        return pip;
+        const kind = round.playerPoints > 0 ? 'win' : round.botPoints > 0 ? 'lose' : 'draw';
+        return create('span', `pip is-${kind}`);
       }),
     );
   }
@@ -180,33 +314,110 @@ export class Hud {
     this.el.streak.textContent = `Série ×${streak}`;
   }
 
-  /** state : { hash } avant révélation, puis { hash, move, salt, verified } */
-  setFairness({ hash, move = null, salt = null, verified = null }) {
+  /** state : { hash } avant révélation, puis { hash, move, boost, salt, verified } */
+  setFairness({ hash, move = null, boost = null, salt = null, verified = null }) {
     const { el } = this;
     el.fairHash.textContent = hash;
     el.fairMove.textContent = move ?? 'en attente';
+    el.fairBoost.textContent = verified === null ? 'en attente' : (boost ?? 'aucun');
     el.fairSalt.textContent = salt ?? 'en attente';
     el.fairPill.classList.toggle('is-verified', verified === true);
     if (verified === null) el.fairText.textContent = `Coup de l'IA scellé · ${hash.slice(0, 6)}…`;
     else el.fairText.textContent = verified ? 'Équité vérifiée' : 'Échec de vérification !';
   }
 
+  // --- Choix du coup ---
+
+  showChoices(visible) {
+    this.choosing = visible;
+    this.el.choices.hidden = !visible;
+  }
+
+  /** state : { shield: {count, armed}, double: {count, armed}, spy: {count} } */
+  setBoosts(state) {
+    for (const button of this.el.boosts) {
+      const info = state[button.dataset.boost];
+      button.disabled = !info || info.count <= 0;
+      if (button.hasAttribute('aria-pressed')) {
+        button.setAttribute('aria-pressed', String(Boolean(info?.armed)));
+      }
+    }
+  }
+
+  setPrompt(text) {
+    this.el.prompt.textContent = text;
+  }
+
+  markExcluded(move) {
+    for (const card of this.el.cards) {
+      card.classList.toggle('is-excluded', card.dataset.move === move);
+    }
+  }
+
+  /** fraction : 1 → 0, ou null pour masquer le chronomètre. */
+  setTimer(fraction, { urgent = false } = {}) {
+    const { timer, timerFill } = this.el;
+    timer.hidden = fraction === null;
+    if (fraction === null) return;
+    timerFill.style.transform = `scaleX(${Math.max(0, fraction)})`;
+    timer.classList.toggle('is-urgent', urgent);
+  }
+
+  // --- Annonces ---
+
   callout(text, { final = false } = {}) {
-    const word = document.createElement('span');
-    word.className = `callout-word${final ? ' is-final' : ''}`;
-    word.textContent = text;
-    this.el.callout.replaceChildren(word);
+    this.el.callout.replaceChildren(
+      create('span', `callout-word${final ? ' is-final' : ''}`, text),
+    );
   }
 
   clearCallout() {
     this.el.callout.replaceChildren();
   }
 
-  showRoundResult({ outcome, title, sub, reward }) {
-    const { result, resultTitle, resultSub, resultReward } = this.el;
+  showVersus({ island, name, title }) {
+    const { versus, versusIsland, versusName, versusTitle } = this.el;
+    versusIsland.textContent = island;
+    versusName.textContent = name;
+    versusTitle.textContent = title;
+    versus.hidden = false;
+  }
+
+  hideVersus() {
+    this.el.versus.hidden = true;
+  }
+
+  showBubble(name, text) {
+    const { bubble, bubbleName, bubbleText } = this.el;
+    bubbleName.textContent = name;
+    bubbleText.textContent = text;
+    bubble.hidden = false;
+  }
+
+  /** Place la bulle au-dessus d'un point de l'écran, sans déborder. */
+  positionBubble(x, y) {
+    const { bubble } = this.el;
+    const half = bubble.offsetWidth / 2 + 12;
+    bubble.style.left = `${Math.min(Math.max(x, half), window.innerWidth - half)}px`;
+    bubble.style.top = `${Math.max(y, bubble.offsetHeight + 70)}px`;
+  }
+
+  hideBubble() {
+    this.el.bubble.hidden = true;
+  }
+
+  get bubbleVisible() {
+    return !this.el.bubble.hidden;
+  }
+
+  showRoundResult({ outcome, title, sub, boostNote = null, boostSide = 'player', reward }) {
+    const { result, resultTitle, resultSub, resultBoost, resultReward } = this.el;
     result.className = `round-result is-${outcome}`;
     resultTitle.textContent = title;
     resultSub.textContent = sub;
+    resultBoost.hidden = !boostNote;
+    resultBoost.textContent = boostNote ?? '';
+    resultBoost.classList.toggle('is-bot', boostSide === 'bot');
     resultReward.hidden = !reward;
     resultReward.textContent = reward ?? '';
     result.hidden = false;
@@ -216,33 +427,46 @@ export class Hud {
     this.el.result.hidden = true;
   }
 
-  showEnd({ won, title, sub, stats, reward }) {
-    const { end, endCard, endTitle, endSub, endStats, endReward } = this.el;
-    endCard.classList.toggle('is-lose', !won);
-    endTitle.textContent = title;
-    endSub.textContent = sub;
-    endStats.replaceChildren(
+  // --- Fin de match ---
+
+  showEnd({ won, title, sub, stats, reward, bonus, note, hint, nextVisible, menuLabel }) {
+    const { el } = this;
+    el.hud.classList.add('is-ended');
+    el.endCard.classList.toggle('is-lose', !won);
+    el.endTitle.textContent = title;
+    el.endSub.textContent = sub;
+    el.endStats.replaceChildren(
       ...stats.map(([label, value]) => {
-        const wrap = document.createElement('div');
-        const dt = document.createElement('dt');
-        const dd = document.createElement('dd');
-        dt.textContent = label;
-        dd.textContent = value;
-        wrap.append(dt, dd);
+        const wrap = create('div');
+        wrap.append(create('dt', '', label), create('dd', '', value));
         return wrap;
       }),
     );
-    endReward.hidden = !reward;
-    endReward.textContent = reward ?? '';
-    end.hidden = false;
-    this.el.again.focus({ preventScroll: true });
+    for (const [node, text] of [
+      [el.endBonus, bonus],
+      [el.endReward, reward],
+      [el.endNote, note],
+    ]) {
+      node.hidden = !text;
+      node.textContent = text ?? '';
+    }
+    el.endHint.hidden = !hint;
+    el.endHint.replaceChildren();
+    if (hint) el.endHint.append(create('strong', '', 'Indice : '), hint);
+    el.next.hidden = !nextVisible;
+    el.again.classList.toggle('btn-primary', !nextVisible);
+    el.again.classList.toggle('btn-ghost', nextVisible);
+    el.menu.textContent = menuLabel;
+    el.end.hidden = false;
+    (nextVisible ? el.next : el.again).focus({ preventScroll: true });
   }
 
   hideEnd() {
     this.el.end.hidden = true;
+    this.el.hud.classList.remove('is-ended');
   }
 
-  toast(message, duration = 3200) {
+  toast(message, duration = 3600) {
     const { toast } = this.el;
     toast.textContent = message;
     toast.classList.add('is-visible');

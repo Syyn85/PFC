@@ -100,18 +100,16 @@ const TOON_EXTRA_LIGHT = /* glsl */ `
 // Fonction partagée : son code source sert de clé de cache au programme GLSL.
 // Tout ce qui varie d'un matériau à l'autre doit donc passer par des uniforms.
 function injectToonExtras(shader) {
-  const extras = this.userData.toonExtras;
-  shader.uniforms.uRimColor = { value: extras.rimColor };
-  shader.uniforms.uRimStrength = { value: extras.rim };
-  shader.uniforms.uRimThreshold = { value: extras.rimThreshold };
-  shader.uniforms.uSpecColor = { value: extras.specColor };
-  shader.uniforms.uSpecStrength = { value: extras.spec };
-  shader.uniforms.uSpecSize = { value: extras.specSize };
+  Object.assign(shader.uniforms, this.userData.toon);
   shader.fragmentShader = shader.fragmentShader
     .replace('#include <common>', `#include <common>\n${TOON_UNIFORMS_DECL}`)
     .replace('#include <opaque_fragment>', TOON_EXTRA_LIGHT);
 }
 
+/**
+ * Matériau toon. Les réglages de liseré et de reflet restent modifiables après
+ * coup via `material.userData.toon.uSpecStrength.value`, etc.
+ */
 export function toonMaterial({
   color = '#ffffff',
   ramp = RAMPS.soft,
@@ -132,13 +130,13 @@ export function toonMaterial({
   // MeshToonMaterial n'expose pas flatShading : on active directement la variante
   // du shader (normales recalculées par facette via les dérivées écran).
   if (flatShading) material.defines = { FLAT_SHADED: '' };
-  material.userData.toonExtras = {
-    rim,
-    rimColor: new THREE.Color(rimColor),
-    rimThreshold,
-    spec,
-    specColor: new THREE.Color(specColor),
-    specSize,
+  material.userData.toon = {
+    uRimColor: { value: new THREE.Color(rimColor) },
+    uRimStrength: { value: rim },
+    uRimThreshold: { value: rimThreshold },
+    uSpecColor: { value: new THREE.Color(specColor) },
+    uSpecStrength: { value: spec },
+    uSpecSize: { value: specSize },
   };
   material.onBeforeCompile = injectToonExtras;
   return material;

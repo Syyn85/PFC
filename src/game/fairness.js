@@ -120,15 +120,16 @@ export async function sha256Hex(text) {
   return sha256Fallback(bytes);
 }
 
-const commitPayload = (move, salt) => `${move}:${salt}`;
+// L'atout éventuel de l'IA fait partie de l'engagement : il est lui aussi scellé.
+const commitPayload = (move, boost, salt) => `${move}:${boost ?? 'none'}:${salt}`;
 
 /** Crée un engagement : seul `hash` est montré avant la révélation. */
-export async function createCommitment(move) {
+export async function createCommitment(move, { boost = null } = {}) {
   const salt = randomHex(16);
-  const hash = await sha256Hex(commitPayload(move, salt));
-  return { move, salt, hash };
+  const hash = await sha256Hex(commitPayload(move, boost, salt));
+  return { move, boost, salt, hash };
 }
 
-export async function verifyCommitment({ hash, move, salt }) {
-  return (await sha256Hex(commitPayload(move, salt))) === hash;
+export async function verifyCommitment({ hash, move, boost = null, salt }) {
+  return (await sha256Hex(commitPayload(move, boost, salt))) === hash;
 }

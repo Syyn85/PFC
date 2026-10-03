@@ -10,12 +10,14 @@ import { Tweens } from './core/tween.js';
 import { createWorld } from './gfx/world.js';
 import { HandRig } from './gfx/hand.js';
 import { Effects } from './gfx/vfx.js';
-import { renderMoveIcons } from './gfx/icons.js';
+import { renderHandIcons } from './gfx/icons.js';
 import { Hud } from './ui/hud.js';
 import { Sfx } from './audio/sfx.js';
+import { Music } from './audio/music.js';
 import { DemoWallet } from './web3/wallet.js';
 import { GameController } from './game/controller.js';
 import { MOVES } from './game/rules.js';
+import { CAMPAIGN } from './game/opponents.js';
 
 const HAND_HEIGHT = 1.55;
 
@@ -37,20 +39,42 @@ function boot() {
   const effects = new Effects(engine.scene, engine.camera, tweens);
   const hud = new Hud();
   const sfx = new Sfx();
+  const music = new Music(sfx);
+  sfx.onUnlock = () => music.start();
   const wallet = new DemoWallet();
-  hud.setSound(!sfx.muted);
-  hud.setCardArt(renderMoveIcons(MOVES));
 
-  const game = new GameController({ engine, tweens, player, bot, effects, hud, sfx, wallet });
+  // Icônes des cartes et portraits des adversaires, rendus depuis le modèle 3D
+  const icons = renderHandIcons([
+    ...MOVES.map((move) => ({ key: move, pose: move })),
+    ...CAMPAIGN.map((o) => ({ key: o.id, pose: o.pose, team: 'bot', palette: o.palette })),
+  ]);
+  hud.setCardArt(icons);
+
+  const game = new GameController({
+    engine,
+    tweens,
+    world,
+    player,
+    bot,
+    effects,
+    hud,
+    sfx,
+    music,
+    wallet,
+    portraits: icons,
+  });
   game.enterTitle();
+  world.setTheme('crepuscule', 0);
 
   // Compile les shaders avant la première image pour éviter les saccades.
   engine.renderer.compile(engine.scene, engine.camera);
 
   let last = performance.now();
   engine.renderer.setAnimationLoop((now) => {
-    const dt = Math.min((now - last) / 1000, 1 / 20);
+    const frame = (now - last) / 1000;
+    const dt = Math.min(frame, 1 / 20);
     last = now;
+    engine.monitor(frame);
     const time = now / 1000;
     tweens.update(dt);
     world.update(dt, time);

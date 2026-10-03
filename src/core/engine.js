@@ -35,6 +35,11 @@ export class Engine {
       lift: 0, // décalage vertical de la cible
       trauma: 0, // intensité du tremblement (0..1)
     };
+    // Résolution adaptative : si l'appareil peine, on baisse la densité de pixels.
+    // ?qualite=max dans l'URL désactive l'ajustement.
+    this.pixelRatio = Math.min(window.devicePixelRatio || 1, this.isMobile ? 1.75 : 2);
+    this.adaptive = new URLSearchParams(location.search).get('qualite') !== 'max';
+    this.frameStats = { time: 0, frames: 0, warmup: 3 };
     this.pointer = new THREE.Vector2();
     this.pointerSmooth = new THREE.Vector2();
     this.layout = null;
@@ -51,7 +56,7 @@ export class Engine {
   resize() {
     const width = window.innerWidth;
     const height = window.innerHeight;
-    const dpr = Math.min(window.devicePixelRatio || 1, this.isMobile ? 1.75 : 2);
+    const dpr = this.pixelRatio;
     this.renderer.setPixelRatio(dpr);
     this.renderer.setSize(width, height, false);
 
@@ -73,6 +78,26 @@ export class Engine {
     this.camera.updateProjectionMatrix();
     this.layout = { aspect, handX, distance, targetY: 1.5, portrait: aspect < 0.85 };
     this.onLayout?.(this.layout);
+  }
+
+  /** À appeler à chaque image : ajuste la résolution si la cadence chute. */
+  monitor(dt) {
+    if (!this.adaptive) return;
+    const stats = this.frameStats;
+    if (stats.warmup > 0) {
+      stats.warmup -= dt;
+      return;
+    }
+    stats.time += dt;
+    stats.frames += 1;
+    if (stats.time < 2) return;
+    const fps = stats.frames / stats.time;
+    stats.time = 0;
+    stats.frames = 0;
+    if (fps < 45 && this.pixelRatio > 0.75) {
+      this.pixelRatio = Math.max(0.75, Math.round((this.pixelRatio - 0.25) * 4) / 4);
+      this.resize();
+    }
   }
 
   addShake(amount) {

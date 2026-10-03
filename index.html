@@ -40,17 +40,36 @@
             >Jetons de démonstration, stockés sur cet appareil</span
           >
           <button
+            id="music-toggle"
+            class="icon-btn"
+            type="button"
+            aria-pressed="true"
+            aria-label="Musique activée"
+          >
+            <svg class="icon-on" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M9 18V6l10-2v12" class="wave" />
+              <circle cx="6.5" cy="18" r="2.5" />
+              <circle cx="16.5" cy="16" r="2.5" />
+            </svg>
+            <svg class="icon-off" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M9 18V6l10-2v12" class="wave" />
+              <circle cx="6.5" cy="18" r="2.5" />
+              <circle cx="16.5" cy="16" r="2.5" />
+              <path class="wave" d="M3 3l18 18" />
+            </svg>
+          </button>
+          <button
             id="sound-toggle"
             class="icon-btn"
             type="button"
             aria-pressed="true"
-            aria-label="Son activé"
+            aria-label="Effets sonores activés"
           >
-            <svg class="icon-sound-on" viewBox="0 0 24 24" aria-hidden="true">
+            <svg class="icon-on" viewBox="0 0 24 24" aria-hidden="true">
               <path d="M4 9h4l5-4v14l-5-4H4z" />
               <path class="wave" d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12" />
             </svg>
-            <svg class="icon-sound-off" viewBox="0 0 24 24" aria-hidden="true">
+            <svg class="icon-off" viewBox="0 0 24 24" aria-hidden="true">
               <path d="M4 9h4l5-4v14l-5-4H4z" />
               <path class="wave" d="M17 9l5 6M22 9l-5 6" />
             </svg>
@@ -69,16 +88,43 @@
           <p class="tagline">Duel au sommet de l'arène céleste</p>
         </div>
         <div class="title-bottom">
-          <div
-            id="format-picker"
-            class="format-picker"
-            role="radiogroup"
-            aria-label="Format du match"
-          ></div>
-          <button id="play-btn" class="btn btn-primary btn-xl" type="button">Jouer</button>
+          <button id="campaign-btn" class="btn btn-primary btn-xl" type="button">
+            Le tour des îles
+          </button>
+          <p id="campaign-progress" class="campaign-progress"></p>
+          <div class="quick-play">
+            <div
+              id="format-picker"
+              class="format-picker"
+              role="radiogroup"
+              aria-label="Format de la partie rapide"
+            ></div>
+            <button id="play-btn" class="btn btn-ghost" type="button">Partie rapide</button>
+          </div>
           <p class="hint">
-            Clavier : <kbd>1</kbd> Pierre · <kbd>2</kbd> Feuille · <kbd>3</kbd> Ciseaux
+            Clavier : <kbd>1</kbd> Pierre · <kbd>2</kbd> Feuille · <kbd>3</kbd> Ciseaux ·
+            <kbd>B</kbd> Bouclier · <kbd>D</kbd> Double · <kbd>E</kbd> Espion
           </p>
+        </div>
+      </section>
+
+      <!-- Carte des îles -->
+      <section id="screen-map" class="screen screen-map" hidden aria-labelledby="map-title">
+        <div class="map-panel">
+          <header class="map-header">
+            <button id="map-back" class="icon-btn" type="button" aria-label="Retour au menu">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path class="wave" d="M15 5l-7 7 7 7" />
+              </svg>
+            </button>
+            <div class="map-heading">
+              <h2 id="map-title" class="map-title">Le tour des îles</h2>
+              <p class="map-sub">
+                Chaque gardien a sa manie. Repère-la, déjoue-la, et libère l'île suivante.
+              </p>
+            </div>
+          </header>
+          <ol id="island-list" class="island-list"></ol>
         </div>
       </section>
 
@@ -95,7 +141,7 @@
           </div>
           <div class="side side-bot">
             <span id="score-bot" class="score">0</span>
-            <span class="side-name">IA</span>
+            <span id="bot-name" class="side-name">IA</span>
           </div>
         </div>
         <div class="hud-row">
@@ -110,49 +156,102 @@
             <span class="fair-icon" aria-hidden="true"></span>
             <span id="fair-text">Coup de l'IA scellé</span>
           </button>
+          <span id="bot-boosts" class="bot-boosts" hidden></span>
         </div>
         <div id="fair-panel" class="fair-panel" hidden>
           <p class="fair-explain">
-            Avant ton choix, l'IA publie l'empreinte SHA-256 de son coup et d'un sel secret. Après
-            la révélation, on recalcule l'empreinte : si elle correspond, l'IA n'a pas pu tricher.
+            Avant ton choix, l'IA publie l'empreinte SHA-256 de son coup, de son atout éventuel et
+            d'un sel secret. Après la révélation, on recalcule l'empreinte : si elle correspond,
+            l'IA n'a pas pu tricher.
           </p>
           <dl>
             <dt>Empreinte</dt>
             <dd><code id="fair-hash">—</code></dd>
             <dt>Coup révélé</dt>
             <dd><code id="fair-move">en attente</code></dd>
+            <dt>Atout</dt>
+            <dd><code id="fair-boost">en attente</code></dd>
             <dt>Sel</dt>
             <dd><code id="fair-salt">en attente</code></dd>
           </dl>
         </div>
       </section>
 
+      <div id="bubble" class="bubble" hidden aria-live="polite">
+        <span id="bubble-name" class="bubble-name"></span>
+        <p id="bubble-text" class="bubble-text"></p>
+      </div>
+
       <div id="callout" class="callout" aria-live="assertive"></div>
+
+      <section id="versus" class="versus" hidden aria-live="polite">
+        <p id="versus-island" class="versus-island"></p>
+        <p id="versus-name" class="versus-name"></p>
+        <p id="versus-title" class="versus-title"></p>
+      </section>
 
       <section id="round-result" class="round-result" hidden aria-live="polite">
         <p id="result-title" class="result-title"></p>
         <p id="result-sub" class="result-sub"></p>
+        <p id="result-boost" class="result-boost" hidden></p>
         <p id="result-reward" class="result-reward" hidden></p>
       </section>
 
       <!-- Choix du coup -->
       <section id="choices" class="choices" hidden aria-label="Choisis ton coup">
-        <p class="choices-prompt">Choisis ton coup</p>
+        <div class="boosts" role="group" aria-label="Atouts (une fois par match)">
+          <button
+            type="button"
+            class="boost boost-shield"
+            data-boost="shield"
+            aria-pressed="false"
+            title="Bouclier : si tu perds cette manche, l'adversaire ne marque pas"
+          >
+            <span class="boost-icon" aria-hidden="true"></span>
+            <span class="boost-label">Bouclier</span>
+          </button>
+          <button
+            type="button"
+            class="boost boost-double"
+            data-boost="double"
+            aria-pressed="false"
+            title="Double : si tu gagnes cette manche, elle compte deux points"
+          >
+            <span class="boost-icon" aria-hidden="true">×2</span>
+            <span class="boost-label">Double</span>
+          </button>
+          <button
+            type="button"
+            class="boost boost-spy"
+            data-boost="spy"
+            title="Espion : révèle un coup que l'adversaire n'a pas joué"
+          >
+            <span class="boost-icon" aria-hidden="true"></span>
+            <span class="boost-label">Espion</span>
+          </button>
+        </div>
+        <p id="choices-prompt" class="choices-prompt">Choisis ton coup</p>
+        <div id="timer" class="timer" hidden>
+          <div id="timer-fill" class="timer-fill"></div>
+        </div>
         <div class="cards">
           <button type="button" class="card card-rock" data-move="rock">
             <img class="card-art" alt="" />
             <span class="card-label">Pierre</span>
             <kbd>1</kbd>
+            <span class="card-spy" aria-hidden="true">Pas l'IA</span>
           </button>
           <button type="button" class="card card-paper" data-move="paper">
             <img class="card-art" alt="" />
             <span class="card-label">Feuille</span>
             <kbd>2</kbd>
+            <span class="card-spy" aria-hidden="true">Pas l'IA</span>
           </button>
           <button type="button" class="card card-scissors" data-move="scissors">
             <img class="card-art" alt="" />
             <span class="card-label">Ciseaux</span>
             <kbd>3</kbd>
+            <span class="card-spy" aria-hidden="true">Pas l'IA</span>
           </button>
         </div>
       </section>
@@ -163,8 +262,12 @@
           <h2 id="end-title" class="end-title">Victoire !</h2>
           <p id="end-sub" class="end-sub"></p>
           <dl id="end-stats" class="end-stats"></dl>
+          <p id="end-bonus" class="end-bonus" hidden></p>
           <p id="end-reward" class="end-reward" hidden></p>
+          <p id="end-note" class="end-note" hidden></p>
+          <p id="end-hint" class="end-hint" hidden></p>
           <div class="end-actions">
+            <button id="next-btn" class="btn btn-primary" type="button" hidden>Île suivante</button>
             <button id="again-btn" class="btn btn-primary" type="button">Rejouer</button>
             <button id="menu-btn" class="btn btn-ghost" type="button">Menu</button>
           </div>

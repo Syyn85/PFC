@@ -10,8 +10,6 @@ export const CONFIG = {
       { id: 'bo5', label: '3 manches gagnantes', short: 'BO5', winsNeeded: 3 },
     ],
     defaultFormat: 'bo3',
-    // 'random' = aléatoire pur, 'markov' = l'IA apprend tes habitudes
-    botStrategy: 'markov',
   },
 
   // Barème de récompenses (en jetons de démo pour l'instant)
@@ -20,6 +18,9 @@ export const CONFIG = {
     matchWin: 10,
     streakEvery: 3,
     streakBonus: 5,
+    // Plafond quotidien des gains contre l'IA (les bonus de première victoire
+    // en campagne n'y sont pas soumis)
+    dailyCap: 80,
   },
 
   token: {

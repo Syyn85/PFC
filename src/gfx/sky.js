@@ -1,15 +1,9 @@
 import * as THREE from 'three';
 
-/** Palette "crépuscule doré" partagée par le ciel, la mer de nuages et le brouillard. */
-export const SKY = {
-  top: new THREE.Color('#2a1f63'),
-  mid: new THREE.Color('#7b4bb3'),
-  horizon: new THREE.Color('#ffaf8c'),
-  glow: new THREE.Color('#ffd9a0'),
-  below: new THREE.Color('#c9779b'),
-  sun: new THREE.Color('#fff1c4'),
-  fog: new THREE.Color('#e79aa6'),
-};
+/**
+ * Ciel, étoiles et mer de nuages. Les couleurs sont pilotées par les thèmes
+ * (themes.js) : chaque uniform de couleur est mis à jour par world.setTheme.
+ */
 
 const SKY_VERTEX = /* glsl */ `
 varying vec3 vDir;
@@ -28,6 +22,9 @@ uniform vec3 uGlow;
 uniform vec3 uBelow;
 uniform vec3 uSun;
 uniform vec3 uSunDir;
+uniform float uAurora;
+uniform float uFlash;
+uniform float uTime;
 varying vec3 vDir;
 
 void main() {
@@ -50,6 +47,18 @@ void main() {
   float ring2 = smoothstep( 0.972, 0.9727, sunDot ) * 0.18;
   col = mix( col, uSun, clamp( disc + ring1 + ring2, 0.0, 1.0 ) );
 
+  // Aurores boréales : rideaux ondulants quantifiés
+  if ( uAurora > 0.0 ) {
+    float wave = sin( d.x * 7.0 + uTime * 0.25 + sin( d.z * 5.0 - uTime * 0.18 ) * 1.6 );
+    float curtain = smoothstep( 0.03, 0.18, h ) * ( 1.0 - smoothstep( 0.45, 0.8, h ) );
+    float a = floor( smoothstep( 0.35, 1.0, wave ) * curtain * 3.0 ) / 3.0;
+    vec3 auroraCol = mix( vec3( 0.25, 1.0, 0.62 ), vec3( 0.62, 0.38, 1.0 ), smoothstep( 0.25, 0.6, h ) );
+    col = mix( col, auroraCol, a * 0.6 * uAurora );
+  }
+
+  // Éclair (orage)
+  col += vec3( 0.75, 0.82, 1.0 ) * uFlash * 0.45;
+
   gl_FragColor = vec4( col, 1.0 );
   #include <colorspace_fragment>
 }
@@ -58,13 +67,16 @@ void main() {
 export function createSky(sunDirection) {
   const material = new THREE.ShaderMaterial({
     uniforms: {
-      uTop: { value: SKY.top },
-      uMid: { value: SKY.mid },
-      uHorizon: { value: SKY.horizon },
-      uGlow: { value: SKY.glow },
-      uBelow: { value: SKY.below },
-      uSun: { value: SKY.sun },
+      uTop: { value: new THREE.Color() },
+      uMid: { value: new THREE.Color() },
+      uHorizon: { value: new THREE.Color() },
+      uGlow: { value: new THREE.Color() },
+      uBelow: { value: new THREE.Color() },
+      uSun: { value: new THREE.Color() },
       uSunDir: { value: sunDirection.clone().normalize() },
+      uAurora: { value: 0 },
+      uFlash: { value: 0 },
+      uTime: { value: 0 },
     },
     vertexShader: SKY_VERTEX,
     fragmentShader: SKY_FRAGMENT,
@@ -96,18 +108,19 @@ export function createStars(count = 420, rand = Math.random) {
   geometry.setAttribute('aSeed', new THREE.BufferAttribute(seeds, 1));
 
   const material = new THREE.ShaderMaterial({
-    uniforms: { uTime: { value: 0 }, uPixelRatio: { value: 1 } },
+    uniforms: { uTime: { value: 0 }, uPixelRatio: { value: 1 }, uAlpha: { value: 1 } },
     vertexShader: /* glsl */ `
       attribute float aSeed;
       uniform float uTime;
       uniform float uPixelRatio;
+      uniform float uAlpha;
       varying float vAlpha;
       void main() {
         vec4 mv = modelViewMatrix * vec4( position, 1.0 );
         gl_Position = projectionMatrix * mv;
         float twinkle = 0.55 + 0.45 * sin( uTime * ( 1.0 + aSeed * 2.5 ) + aSeed * 40.0 );
         float height = normalize( position ).y;
-        vAlpha = twinkle * smoothstep( 0.3, 0.7, height );
+        vAlpha = twinkle * smoothstep( 0.3 - 0.25 * uAlpha, 0.7 - 0.3 * uAlpha, height ) * uAlpha;
         gl_PointSize = ( 1.5 + aSeed * 2.5 ) * uPixelRatio;
       }
     `,
@@ -175,11 +188,11 @@ export function createCloudSea() {
   const material = new THREE.ShaderMaterial({
     uniforms: {
       uTime: { value: 0 },
-      uDeep: { value: new THREE.Color('#8a5aa8') },
-      uMid: { value: new THREE.Color('#c27fb4') },
-      uLight: { value: new THREE.Color('#f2a8b8') },
-      uFoam: { value: new THREE.Color('#ffd6c9') },
-      uFogColor: { value: SKY.horizon },
+      uDeep: { value: new THREE.Color() },
+      uMid: { value: new THREE.Color() },
+      uLight: { value: new THREE.Color() },
+      uFoam: { value: new THREE.Color() },
+      uFogColor: { value: new THREE.Color() },
     },
     vertexShader: /* glsl */ `
       varying vec3 vWorld;

@@ -1,4 +1,5 @@
 import { CONFIG } from '../config.js';
+import { readJSON, writeJSON } from '../core/storage.js';
 
 /**
  * Couche "portefeuille".
@@ -62,21 +63,12 @@ export class DemoWallet {
   }
 
   #load() {
-    try {
-      const raw = localStorage.getItem(this.storageKey);
-      const parsed = raw ? JSON.parse(raw) : null;
-      if (parsed && Number.isFinite(parsed.balance) && Array.isArray(parsed.history)) return parsed;
-    } catch {
-      /* stockage indisponible ou corrompu : on repart de zéro */
-    }
+    const saved = readJSON(this.storageKey, null);
+    if (saved && Number.isFinite(saved.balance) && Array.isArray(saved.history)) return saved;
     return { balance: 0, history: [] };
   }
 
   #save() {
-    try {
-      localStorage.setItem(this.storageKey, JSON.stringify(this.#state));
-    } catch {
-      /* navigation privée : le solde reste en mémoire */
-    }
+    writeJSON(this.storageKey, this.#state);
   }
 }

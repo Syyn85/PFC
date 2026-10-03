@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { seededRandom } from '../core/random.js';
-import { SKY, createCloudSea, createSky, createStars } from './sky.js';
+import { createCloudSea, createSky, createStars } from './sky.js';
+import { THEMES } from './themes.js';
 import { RAMPS, canvasTexture, glowSprite, toonMaterial, toonMesh } from './toon.js';
 import { bakeStatic } from './bake.js';
 import {
@@ -16,7 +17,8 @@ import {
 
 /**
  * Le monde : une arène de pierre posée sur une île flottante au-dessus d'une
- * mer de nuages, au crépuscule. Tout est procédural (aucun asset externe).
+ * mer de nuages. Tout est procédural (aucun asset externe) ; l'ambiance
+ * (ciel, lumières, brouillard) change selon l'île via setTheme().
  */
 
 const OUTLINE = { color: '#231a3d', thickness: 2.2 };
@@ -24,12 +26,11 @@ export const ARENA_RADIUS = 4.3;
 
 export function createWorld(scene) {
   const rand = seededRandom(20251003);
-  const animated = [];
 
-  // --- Lumières ---
+  // --- Lumières (couleurs fixées par le thème) ---
   const sunDirection = new THREE.Vector3(-0.55, 0.16, -1);
-  scene.background = SKY.horizon.clone();
-  scene.fog = new THREE.Fog(SKY.fog, 38, 140);
+  scene.background = new THREE.Color();
+  scene.fog = new THREE.Fog(new THREE.Color(), 38, 140);
 
   const hemi = new THREE.HemisphereLight('#d9ccff', '#7a4a86', 1.15);
   scene.add(hemi);
@@ -44,7 +45,8 @@ export function createWorld(scene) {
   scene.add(key, key.target);
 
   // --- Ciel, étoiles, mer de nuages ---
-  scene.add(createSky(sunDirection));
+  const sky = createSky(sunDirection);
+  scene.add(sky);
   const stars = createStars(420, rand);
   scene.add(stars);
   const sea = createCloudSea();
@@ -166,9 +168,88 @@ export function createWorld(scene) {
   const fireflies = createFireflies(rand, 70);
   scene.add(fireflies.points);
 
+  // --- Ambiance : thèmes et transitions ---
+  const uniforms = {
+    sky: sky.material.uniforms,
+    sea: sea.material.uniforms,
+    stars: stars.material.uniforms,
+    fireflies: fireflies.points.material.uniforms,
+  };
+  let current = themeState(THEMES.crepuscule);
+  let transition = null;
+  const lightning = { enabled: false, timer: 4, flash: 0, second: 0 };
+  const world = { update, setTheme, onLightning: null, key, hemi, sunDirection, coins };
+
+  function applyAmbience(state) {
+    const { sky: k, sea: w } = uniforms;
+    k.uTop.value.copy(state.top);
+    k.uMid.value.copy(state.mid);
+    k.uHorizon.value.copy(state.horizon);
+    k.uGlow.value.copy(state.glow);
+    k.uBelow.value.copy(state.below);
+    k.uSun.value.copy(state.sun);
+    k.uAurora.value = state.aurora;
+    w.uDeep.value.copy(state.deep);
+    w.uMid.value.copy(state.seaMid);
+    w.uLight.value.copy(state.light);
+    w.uFoam.value.copy(state.foam);
+    w.uFogColor.value.copy(state.horizon);
+    scene.background.copy(state.horizon);
+    scene.fog.color.copy(state.fog);
+    hemi.color.copy(state.hemiSky);
+    hemi.groundColor.copy(state.hemiGround);
+    hemi.intensity = state.hemiIntensity;
+    key.color.copy(state.keyColor);
+    key.intensity = state.keyIntensity;
+    uniforms.stars.uAlpha.value = state.stars;
+    uniforms.fireflies.uAlpha.value = 0.35 + 0.65 * state.lanterns;
+  }
+  applyAmbience(current);
+
+  /** Change d'ambiance en douceur (durée en secondes, 0 = immédiat). */
+  function setTheme(name, duration = 1.8) {
+    const theme = THEMES[name] ?? THEMES.crepuscule;
+    const target = themeState(theme);
+    lightning.enabled = theme.lightning;
+    if (duration <= 0) {
+      current = target;
+      transition = null;
+      applyAmbience(current);
+      return;
+    }
+    transition = { from: cloneState(current), to: target, t: 0, duration };
+  }
+
   function update(dt, time) {
     sea.material.uniforms.uTime.value = time;
     stars.material.uniforms.uTime.value = time;
+    uniforms.sky.uTime.value = time;
+
+    if (transition) {
+      transition.t += dt;
+      const x = Math.min(transition.t / transition.duration, 1);
+      lerpState(transition.from, transition.to, x * x * (3 - 2 * x), current);
+      applyAmbience(current);
+      if (x >= 1) transition = null;
+    }
+
+    // Éclairs d'orage : double flash puis décroissance
+    if (lightning.enabled) {
+      lightning.timer -= dt;
+      if (lightning.timer <= 0) {
+        lightning.flash = 1;
+        lightning.second = 0.12;
+        lightning.timer = 5 + Math.random() * 7;
+        world.onLightning?.();
+      }
+      if (lightning.second > 0) {
+        lightning.second -= dt;
+        if (lightning.second <= 0) lightning.flash = Math.max(lightning.flash, 0.8);
+      }
+    }
+    lightning.flash *= Math.exp(-dt * 7);
+    uniforms.sky.uFlash.value = lightning.flash;
+    hemi.intensity = current.hemiIntensity + lightning.flash * 1.6;
 
     for (const coin of coins) {
       const o = coin.userData.orbit;
@@ -191,8 +272,8 @@ export function createWorld(scene) {
     }
     for (const [i, lantern] of lanterns.entries()) {
       const flicker = 0.85 + 0.1 * Math.sin(time * 9 + i * 2) + 0.05 * Math.sin(time * 23 + i);
-      lantern.userData.glow.material.opacity = 0.5 * flicker;
-      lantern.userData.glow.scale.setScalar(2.3 * flicker);
+      lantern.userData.glow.material.opacity = 0.9 * current.lanterns * flicker;
+      lantern.userData.glow.scale.setScalar((1.6 + 1.4 * current.lanterns) * flicker);
     }
     petals.update(dt, time);
     fireflies.update(time);
@@ -203,7 +284,46 @@ export function createWorld(scene) {
     fireflies.points.material.uniforms.uPixelRatio,
   ];
 
-  return { update, key, hemi, sunDirection, coins, pixelRatioUniforms };
+  world.pixelRatioUniforms = pixelRatioUniforms;
+  return world;
+}
+
+// --- États d'ambiance -----------------------------------------------------------
+
+function themeState(theme) {
+  const c = (value) => new THREE.Color(value);
+  return {
+    top: c(theme.sky.top),
+    mid: c(theme.sky.mid),
+    horizon: c(theme.sky.horizon),
+    glow: c(theme.sky.glow),
+    below: c(theme.sky.below),
+    sun: c(theme.sky.sun),
+    fog: c(theme.fog),
+    deep: c(theme.sea.deep),
+    seaMid: c(theme.sea.mid),
+    light: c(theme.sea.light),
+    foam: c(theme.sea.foam),
+    hemiSky: c(theme.hemi.sky),
+    hemiGround: c(theme.hemi.ground),
+    hemiIntensity: theme.hemi.intensity,
+    keyColor: c(theme.key.color),
+    keyIntensity: theme.key.intensity,
+    stars: theme.stars,
+    lanterns: theme.lanterns,
+    aurora: theme.aurora,
+  };
+}
+
+function cloneState(state) {
+  return Object.fromEntries(Object.entries(state).map(([k, v]) => [k, v?.isColor ? v.clone() : v]));
+}
+
+function lerpState(from, to, k, out) {
+  for (const key of Object.keys(out)) {
+    if (out[key]?.isColor) out[key].lerpColors(from[key], to[key], k);
+    else out[key] = from[key] + (to[key] - from[key]) * k;
+  }
 }
 
 // --- Corps de l'île ----------------------------------------------------------
@@ -505,11 +625,12 @@ function createFireflies(rand, count) {
   geo.setAttribute('position', new THREE.BufferAttribute(base, 3));
   geo.setAttribute('aSeed', new THREE.BufferAttribute(seeds, 1));
   const material = new THREE.ShaderMaterial({
-    uniforms: { uTime: { value: 0 }, uPixelRatio: { value: 1 } },
+    uniforms: { uTime: { value: 0 }, uPixelRatio: { value: 1 }, uAlpha: { value: 1 } },
     vertexShader: /* glsl */ `
       attribute float aSeed;
       uniform float uTime;
       uniform float uPixelRatio;
+      uniform float uAlpha;
       varying float vAlpha;
       void main() {
         vec3 p = position;
@@ -517,7 +638,7 @@ function createFireflies(rand, count) {
         p += vec3( sin( t ) * 0.6, sin( t * 1.7 ) * 0.35, cos( t * 0.8 ) * 0.6 );
         vec4 mv = modelViewMatrix * vec4( p, 1.0 );
         gl_Position = projectionMatrix * mv;
-        vAlpha = 0.35 + 0.65 * pow( 0.5 + 0.5 * sin( uTime * ( 2.0 + aSeed * 3.0 ) + aSeed * 50.0 ), 3.0 );
+        vAlpha = uAlpha * ( 0.35 + 0.65 * pow( 0.5 + 0.5 * sin( uTime * ( 2.0 + aSeed * 3.0 ) + aSeed * 50.0 ), 3.0 ) );
         gl_PointSize = ( 10.0 + aSeed * 8.0 ) * uPixelRatio * ( 10.0 / -mv.z );
       }
     `,

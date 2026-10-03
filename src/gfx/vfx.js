@@ -167,6 +167,83 @@ export class Effects {
     this.ring.visible = false;
     this.ringState = { scale: 0.1, opacity: 0 };
     scene.add(this.ring);
+
+    // Bouclier hexagonal (atout)
+    const flat = (color, opacity) =>
+      new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      });
+    this.shield = new THREE.Group();
+    this.shieldParts = [
+      [new THREE.Mesh(new THREE.CircleGeometry(0.86, 6), flat('#7fe7ff', 0.28)), 0.28],
+      [new THREE.Mesh(new THREE.RingGeometry(0.9, 0.99, 6), flat('#231a3d', 1)), 1],
+      [new THREE.Mesh(new THREE.RingGeometry(0.78, 0.9, 6), flat('#e6fdff', 1)), 1],
+      [new THREE.Mesh(new THREE.RingGeometry(0.4, 0.47, 6), flat('#bff6ff', 0.8)), 0.8],
+    ];
+    this.shieldParts.forEach(([mesh], i) => {
+      mesh.position.z = i * 0.002;
+      this.shield.add(mesh);
+    });
+    this.shield.visible = false;
+    this.shieldState = { scale: 0, opacity: 0 };
+    scene.add(this.shield);
+
+    this.badges = [];
+    this.badgeTextures = new Map();
+  }
+
+  /** Bouclier qui apparaît devant une main et encaisse le coup. */
+  async shieldBlock(position) {
+    this.shield.position.copy(position);
+    this.shield.visible = true;
+    Object.assign(this.shieldState, { scale: 0.2, opacity: 1 });
+    await this.tweens.to(this.shieldState, { scale: 1 }, { duration: 0.28, ease: ease.outBack });
+    await this.tweens.wait(0.7);
+    await this.tweens.to(this.shieldState, { opacity: 0, scale: 1.25 }, { duration: 0.35 });
+  }
+
+  /** Texte "comic" qui monte et s'efface (×2, Bloqué !…). */
+  badge(text, position, { fill = '#ffd23f', size = 1 } = {}) {
+    const key = `${text}|${fill}`;
+    if (!this.badgeTextures.has(key)) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 256;
+      const ctx = canvas.getContext('2d');
+      ctx.font = '150px "Lilita One", "Arial Black", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = 30;
+      ctx.strokeStyle = '#231a3d';
+      ctx.strokeText(text, 256, 138);
+      ctx.fillStyle = fill;
+      ctx.fillText(text, 256, 128);
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      this.badgeTextures.set(key, texture);
+    }
+    const sprite = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: this.badgeTextures.get(key),
+        transparent: true,
+        depthTest: false,
+        fog: false,
+      }),
+    );
+    sprite.renderOrder = 11;
+    sprite.position.copy(position);
+    sprite.scale.set(1.7 * size, 0.85 * size, 1);
+    this.scene.add(sprite);
+    const state = { rise: 0, opacity: 1, pop: 0.3 };
+    this.badges.push({ sprite, state, base: position.clone(), size });
+    this.tweens.to(state, { pop: 1 }, { duration: 0.3, ease: ease.outBack });
+    this.tweens.to(state, { rise: 0.7 }, { duration: 1.4, ease: ease.outCubic });
+    this.tweens.to(state, { opacity: 0 }, { duration: 0.4, delay: 1.0 });
   }
 
   /** Impact au moment de la révélation. */
@@ -276,5 +353,21 @@ export class Effects {
       this.ring.material.opacity = this.ringState.opacity;
       if (this.ringState.opacity <= 0.001) this.ring.visible = false;
     }
+    if (this.shield.visible) {
+      const st = this.shieldState;
+      this.shield.quaternion.copy(this.camera.quaternion);
+      this.shield.scale.setScalar(Math.max(st.scale, 0.001));
+      for (const [mesh, opacity] of this.shieldParts) mesh.material.opacity = opacity * st.opacity;
+      if (st.opacity <= 0.001) this.shield.visible = false;
+    }
+    this.badges = this.badges.filter(({ sprite, state, base, size }) => {
+      sprite.position.set(base.x, base.y + state.rise, base.z);
+      sprite.scale.set(1.7 * size * state.pop, 0.85 * size * state.pop, 1);
+      sprite.material.opacity = state.opacity;
+      if (state.opacity > 0.001) return true;
+      sprite.removeFromParent();
+      sprite.material.dispose();
+      return false;
+    });
   }
 }

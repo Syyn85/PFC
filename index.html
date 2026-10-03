@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#2a1f63" />
+    <title>PFC Arena</title>
+    <meta
+      name="description"
+      content="Pierre, feuille, ciseaux en 3D cel shading : affronte l'IA dans une arène flottante."
+    />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='28' fill='%23ffcb47' stroke='%23231a3d' stroke-width='6'/%3E%3Ctext x='32' y='42' font-size='26' text-anchor='middle' font-family='Arial Black' fill='%23231a3d'%3EP%3C/text%3E%3C/svg%3E"
+    />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="scene" aria-hidden="true"></canvas>
+      <div class="vignette" aria-hidden="true"></div>
+
+      <div id="loader" class="loader" role="status">
+        <div class="loader-coin" aria-hidden="true"></div>
+        <p>Construction de l'arène…</p>
+      </div>
+
+      <header class="topbar">
+        <div class="brand" aria-label="PFC Arena">
+          <span class="brand-mark" aria-hidden="true">PFC</span>
+          <span class="brand-name">Arena</span>
+        </div>
+        <div class="topbar-actions">
+          <button id="wallet-chip" class="wallet-chip" type="button" aria-describedby="wallet-hint">
+            <span class="coin-dot" aria-hidden="true"></span>
+            <span id="wallet-balance" class="wallet-balance">0</span>
+            <span class="wallet-symbol">PFC</span>
+            <span class="wallet-badge">Démo</span>
+          </button>
+          <span id="wallet-hint" class="sr-only"
+            >Jetons de démonstration, stockés sur cet appareil</span
+          >
+          <button
+            id="sound-toggle"
+            class="icon-btn"
+            type="button"
+            aria-pressed="true"
+            aria-label="Son activé"
+          >
+            <svg class="icon-sound-on" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 9h4l5-4v14l-5-4H4z" />
+              <path class="wave" d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12" />
+            </svg>
+            <svg class="icon-sound-off" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 9h4l5-4v14l-5-4H4z" />
+              <path class="wave" d="M17 9l5 6M22 9l-5 6" />
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- Écran titre -->
+      <section id="screen-title" class="screen screen-title" aria-labelledby="game-title">
+        <div class="title-top">
+          <h1 id="game-title" class="logo">
+            <span class="logo-word w-rock">Pierre</span>
+            <span class="logo-word w-paper">Feuille</span>
+            <span class="logo-word w-scissors">Ciseaux</span>
+          </h1>
+          <p class="tagline">Duel au sommet de l'arène céleste</p>
+        </div>
+        <div class="title-bottom">
+          <div
+            id="format-picker"
+            class="format-picker"
+            role="radiogroup"
+            aria-label="Format du match"
+          ></div>
+          <button id="play-btn" class="btn btn-primary btn-xl" type="button">Jouer</button>
+          <p class="hint">
+            Clavier : <kbd>1</kbd> Pierre · <kbd>2</kbd> Feuille · <kbd>3</kbd> Ciseaux
+          </p>
+        </div>
+      </section>
+
+      <!-- HUD du match -->
+      <section id="hud" class="hud" hidden aria-label="Score">
+        <div class="scoreboard">
+          <div class="side side-player">
+            <span class="side-name">Toi</span>
+            <span id="score-player" class="score">0</span>
+          </div>
+          <div class="round-info">
+            <span id="round-label" class="round-label">Manche 1</span>
+            <div id="pips" class="pips" aria-hidden="true"></div>
+          </div>
+          <div class="side side-bot">
+            <span id="score-bot" class="score">0</span>
+            <span class="side-name">IA</span>
+          </div>
+        </div>
+        <div class="hud-row">
+          <span id="streak" class="streak" hidden></span>
+          <button
+            id="fair-pill"
+            class="fair-pill"
+            type="button"
+            aria-expanded="false"
+            aria-controls="fair-panel"
+          >
+            <span class="fair-icon" aria-hidden="true"></span>
+            <span id="fair-text">Coup de l'IA scellé</span>
+          </button>
+        </div>
+        <div id="fair-panel" class="fair-panel" hidden>
+          <p class="fair-explain">
+            Avant ton choix, l'IA publie l'empreinte SHA-256 de son coup et d'un sel secret. Après
+            la révélation, on recalcule l'empreinte : si elle correspond, l'IA n'a pas pu tricher.
+          </p>
+          <dl>
+            <dt>Empreinte</dt>
+            <dd><code id="fair-hash">—</code></dd>
+            <dt>Coup révélé</dt>
+            <dd><code id="fair-move">en attente</code></dd>
+            <dt>Sel</dt>
+            <dd><code id="fair-salt">en attente</code></dd>
+          </dl>
+        </div>
+      </section>
+
+      <div id="callout" class="callout" aria-live="assertive"></div>
+
+      <section id="round-result" class="round-result" hidden aria-live="polite">
+        <p id="result-title" class="result-title"></p>
+        <p id="result-sub" class="result-sub"></p>
+        <p id="result-reward" class="result-reward" hidden></p>
+      </section>
+
+      <!-- Choix du coup -->
+      <section id="choices" class="choices" hidden aria-label="Choisis ton coup">
+        <p class="choices-prompt">Choisis ton coup</p>
+        <div class="cards">
+          <button type="button" class="card card-rock" data-move="rock">
+            <img class="card-art" alt="" />
+            <span class="card-label">Pierre</span>
+            <kbd>1</kbd>
+          </button>
+          <button type="button" class="card card-paper" data-move="paper">
+            <img class="card-art" alt="" />
+            <span class="card-label">Feuille</span>
+            <kbd>2</kbd>
+          </button>
+          <button type="button" class="card card-scissors" data-move="scissors">
+            <img class="card-art" alt="" />
+            <span class="card-label">Ciseaux</span>
+            <kbd>3</kbd>
+          </button>
+        </div>
+      </section>
+
+      <!-- Fin de match -->
+      <section id="screen-end" class="screen screen-end" hidden aria-labelledby="end-title">
+        <div class="end-card">
+          <h2 id="end-title" class="end-title">Victoire !</h2>
+          <p id="end-sub" class="end-sub"></p>
+          <dl id="end-stats" class="end-stats"></dl>
+          <p id="end-reward" class="end-reward" hidden></p>
+          <div class="end-actions">
+            <button id="again-btn" class="btn btn-primary" type="button">Rejouer</button>
+            <button id="menu-btn" class="btn btn-ghost" type="button">Menu</button>
+          </div>
+        </div>
+      </section>
+
+      <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

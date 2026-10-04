@@ -8,6 +8,7 @@
     "dev": "vite",
     "build": "vite build",
     "build:single": "vite build --mode single",
+    "capture:visual": "node scripts/capture-visual.cjs",
     "preview": "vite preview",
     "test": "vitest run"
   },
@@ -17,6 +18,7 @@
     "three": "^0.186.1"
   },
   "devDependencies": {
+    "playwright-core": "^1.62.1",
     "vite": "^8.3.2",
     "vitest": "^5.0.3"
   }

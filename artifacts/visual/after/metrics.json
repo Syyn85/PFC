@@ -1,0 +1,45 @@
+{
+  "phase": "after",
+  "browser": "151.0.7922.173",
+  "cases": [
+    {
+      "name": "desktop",
+      "errors": [],
+      "viewport": [
+        1440,
+        900
+      ],
+      "dpr": 1,
+      "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+      "calls": 193,
+      "triangles": 118578,
+      "state": "ended"
+    },
+    {
+      "name": "mobile",
+      "errors": [],
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 1,
+      "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+      "calls": 175,
+      "triangles": 112694,
+      "state": "ended"
+    },
+    {
+      "name": "landscape",
+      "errors": [],
+      "viewport": [
+        844,
+        390
+      ],
+      "dpr": 1,
+      "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+      "calls": 195,
+      "triangles": 119778,
+      "state": "ended"
+    }
+  ]
+}

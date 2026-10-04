@@ -97,12 +97,76 @@ const TOON_EXTRA_LIGHT = /* glsl */ `
 #include <opaque_fragment>
 `;
 
+// Ombres portées en aplat (lumières directionnelles) :
+//  - toonShadowMap lit la carte en cinq points fixes (centre et diagonales à ±0,5 texel)
+//    au lieu du disque tourné par un bruit de getShadow (bord granuleux une fois seuillé) :
+//    avec le filtrage PCF matériel, c'est un filtre en tente dont l'isocontour 0,5 est
+//    lisse. Le rayon de la lumière (LightShadow.radius) est donc ignoré ici ;
+//  - toonShadow seuille ce facteur à 0,5 sur environ un pixel écran (bord net, anticrénelé)
+//    et, dans l'ombre, ramène l'éclairage direct à un ton unique : le palier sombre de la
+//    rampe (lu dans la rampe elle-même) creusé de TOON_CAST_DEPTH. Toute surface à l'ombre
+//    d'une main prend ce même aplat, un cran sous l'ombre propre des volumes, pour que les
+//    objets restent bien posés au sol (sur l'herbe surtout, qui n'a pas d'ombre propre).
+//    LightShadow.intensity reste un dosage (1 = aplat atteint), pas un second plancher.
+const TOON_SHADOW_PARS = /* glsl */ `
+#include <shadowmap_pars_fragment>
+#if defined( USE_SHADOWMAP ) && NUM_DIR_LIGHT_SHADOWS > 0
+  #ifdef SHADOWMAP_TYPE_PCF
+    float toonShadowMap( sampler2DShadow map, vec2 mapSize, float bias, vec4 coord ) {
+      coord.xyz /= coord.w;
+      coord.z += bias;
+      if ( any( lessThan( coord.xy, vec2( 0.0 ) ) ) || any( greaterThan( coord.xyz, vec3( 1.0 ) ) ) ) return 1.0;
+      vec2 d = 0.5 / mapSize;
+      return 0.2 * (
+        texture( map, coord.xyz ) +
+        texture( map, vec3( coord.xy - d, coord.z ) ) +
+        texture( map, vec3( coord.xy + d, coord.z ) ) +
+        texture( map, vec3( coord.x - d.x, coord.y + d.y, coord.z ) ) +
+        texture( map, vec3( coord.x + d.x, coord.y - d.y, coord.z ) )
+      );
+    }
+  #else
+    #define toonShadowMap( map, mapSize, bias, coord ) getShadow( map, mapSize, 1.0, bias, 0.0, coord )
+  #endif
+
+  const float TOON_CAST_DEPTH = 0.5;
+
+  float toonShadow( float shadow, float intensity, vec3 normal, vec3 lightDir ) {
+    float aa = clamp( 0.5 * fwidth( shadow ), 0.02, 0.5 );
+    float lit = mix( 1.0, smoothstep( 0.5 - aa, 0.5 + aa, shadow ), intensity );
+    #ifdef USE_GRADIENTMAP
+      float dark = texture2D( gradientMap, vec2( 0.0 ) ).r;
+    #else
+      float dark = 0.7; // palier sombre de la rampe par défaut de MeshToonMaterial
+    #endif
+    // Facteur de directLight.color, que RE_Direct multiplie ensuite par la rampe
+    float ramp = getGradientIrradiance( normal, lightDir ).r;
+    return mix( min( dark * TOON_CAST_DEPTH / max( ramp, 1e-3 ), 1.0 ), 1.0, lit );
+  }
+#endif
+`;
+
+// lights_fragment_begin où l'ombre des lumières directionnelles passe par toonShadow.
+// Ponctuelles et spots restent intacts ; sans carte d'ombre ou sans receiveShadow, le
+// code d'origine (et son 1.0) s'applique toujours.
+const DIR = 'directionalLightShadow';
+const DIR_SHADOW_CALL = `getShadow( directionalShadowMap[ i ], ${DIR}.shadowMapSize, ${DIR}.shadowIntensity, ${DIR}.shadowBias, ${DIR}.shadowRadius, vDirectionalShadowCoord[ i ] )`;
+const TOON_LIGHTS_BEGIN = THREE.ShaderChunk.lights_fragment_begin.replace(
+  DIR_SHADOW_CALL,
+  `toonShadow( toonShadowMap( directionalShadowMap[ i ], ${DIR}.shadowMapSize, ${DIR}.shadowBias, vDirectionalShadowCoord[ i ] ), ${DIR}.shadowIntensity, geometryNormal, directLight.direction )`,
+);
+if (TOON_LIGHTS_BEGIN === THREE.ShaderChunk.lights_fragment_begin) {
+  console.warn('toon.js : appel getShadow introuvable (version de three ?), ombres non seuillées');
+}
+
 // Fonction partagée : son code source sert de clé de cache au programme GLSL.
 // Tout ce qui varie d'un matériau à l'autre doit donc passer par des uniforms.
 function injectToonExtras(shader) {
   Object.assign(shader.uniforms, this.userData.toon);
   shader.fragmentShader = shader.fragmentShader
     .replace('#include <common>', `#include <common>\n${TOON_UNIFORMS_DECL}`)
+    .replace('#include <shadowmap_pars_fragment>', TOON_SHADOW_PARS)
+    .replace('#include <lights_fragment_begin>', TOON_LIGHTS_BEGIN)
     .replace('#include <opaque_fragment>', TOON_EXTRA_LIGHT);
 }
 

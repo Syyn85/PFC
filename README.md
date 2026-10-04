@@ -119,8 +119,10 @@ tests/game.test.js    tests de la logique
    spéculaire dur**, réglables par matériau via des uniforms.
 3. **Contours « inverted hull »** : une copie de chaque mesh, aux normales lissées, rendue
    en faces arrière et gonflée dans l'espace écran pour une épaisseur constante en pixels.
-4. Ombres portées nettes, brouillard teinté, palette crépusculaire cohérente entre ciel,
-   mer de nuages et lumières.
+4. **Ombres portées en aplat** : la carte d'ombre est lue en cinq points fixes puis seuillée
+   (bord net, anticrénelé sur un pixel), et l'ombre prend un ton unique tiré de la rampe du
+   matériau, un cran sous l'ombre propre des volumes. Plus de dégradé ni de grain.
+5. Brouillard teinté, palette crépusculaire cohérente entre ciel, mer de nuages et lumières.
 
 ## Prochaines étapes : le play-to-earn
 

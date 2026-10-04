@@ -38,6 +38,9 @@ export function createWorld(scene) {
   const key = new THREE.DirectionalLight('#fff0dc', 2.9);
   key.position.set(5.5, 10, 7.5);
   key.castShadow = true;
+  // Carte d'ombre sur toute l'île : arbres, lanternes et bras (qui sortent du cadre) gardent
+  // leur ombre. En 2048², un texel couvre 0,009 unité, assez fin pour le bord seuillé des
+  // ombres toon (voir toonShadow dans toon.js).
   key.shadow.mapSize.set(2048, 2048);
   Object.assign(key.shadow.camera, { left: -9, right: 9, top: 9, bottom: -9, near: 1, far: 40 });
   key.shadow.bias = -0.0004;

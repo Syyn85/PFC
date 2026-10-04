@@ -9,7 +9,7 @@ import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
  *  - halos lumineux additifs
  */
 
-export const INK = new THREE.Color('#231a3d');
+export const INK = new THREE.Color('#0b1a2e');
 
 /** Uniforms partagés par tous les contours (mis à jour au redimensionnement). */
 export const outlineUniforms = {

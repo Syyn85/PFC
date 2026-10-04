@@ -7,11 +7,11 @@ import { bakeStatic } from './bake.js';
 import {
   createCloud,
   createCoin,
-  createCrystalCluster,
   createIslet,
   createLantern,
+  createPalmTree,
   createRock,
-  createTorii,
+  createRuinGate,
   createTree,
 } from './props.js';
 
@@ -21,7 +21,7 @@ import {
  * (ciel, lumières, brouillard) change selon l'île via setTheme().
  */
 
-const OUTLINE = { color: '#231a3d', thickness: 2.2 };
+const OUTLINE = { color: '#0b1a2e', thickness: 2.2 };
 export const ARENA_RADIUS = 4.3;
 
 export function createWorld(scene) {
@@ -32,7 +32,7 @@ export function createWorld(scene) {
   scene.background = new THREE.Color();
   scene.fog = new THREE.Fog(new THREE.Color(), 38, 140);
 
-  const hemi = new THREE.HemisphereLight('#d9ccff', '#7a4a86', 1.15);
+  const hemi = new THREE.HemisphereLight('#dff4ff', '#4b7156', 1.25);
   scene.add(hemi);
 
   const key = new THREE.DirectionalLight('#fff0dc', 2.9);
@@ -61,10 +61,10 @@ export function createWorld(scene) {
   island.add(createIslandBody(rand));
   island.add(createArena());
 
-  // Torii derrière l'arène
-  const torii = createTorii();
-  torii.position.set(0, -0.8, -6.2);
-  island.add(torii);
+  // Ruines légères derrière l'arène : un cadre d'aventure, pas un mur visuel.
+  const gate = createRuinGate();
+  gate.position.set(0, -0.76, -6.1);
+  island.add(gate);
 
   // Lanternes autour de l'arène
   const lanterns = [];
@@ -81,51 +81,47 @@ export function createWorld(scene) {
     lanterns.push(lantern);
   }
 
-  // Arbres en fleurs
+  // Bosquets regroupés : silhouette lisible et profondeur tropicale.
   for (const [x, z, s] of [
-    [-6.6, -2.2, 1.05],
-    [-5.0, -5.9, 1.25],
-    [-7.6, 1.6, 0.9],
-    [6.4, -2.6, 1.1],
-    [4.6, -6.3, 1.3],
-    [7.6, 1.0, 0.85],
-    [-2.6, -8.3, 1.1],
-    [2.4, -8.6, 1.0],
-    [-8.4, -4.6, 0.95],
-    [8.3, -5.1, 1.0],
+    [-6.7, -2.4, 1.1],
+    [-5.2, -6.3, 1.28],
+    [-7.5, 1.4, 0.92],
+    [6.5, -2.8, 1.15],
+    [5.0, -6.5, 1.24],
+    [7.7, 1.0, 0.88],
   ]) {
     const tree = createTree(rand, { scale: s });
     tree.position.set(x, -0.82, z);
     island.add(tree);
   }
 
-  // Rochers et cristaux
-  for (let i = 0; i < 14; i++) {
+  for (const [x, z, s] of [
+    [-7.8, -4.7, 1.05],
+    [-2.6, -8.15, 1.15],
+    [2.75, -8.2, 1.05],
+    [7.9, -4.8, 1.0],
+  ]) {
+    const palm = createPalmTree(rand, { scale: s });
+    palm.position.set(x, -0.78, z);
+    island.add(palm);
+  }
+
+  // Quelques rochers seulement : la scène respire autour des mains.
+  for (let i = 0; i < 10; i++) {
     const a = rand() * Math.PI * 2;
     const r = 5.2 + rand() * 3.4;
     const rock = createRock(rand, { size: 0.25 + rand() * 0.35 });
     rock.position.set(Math.cos(a) * r, -0.75, Math.sin(a) * r * 0.9);
     island.add(rock);
   }
-  for (const [x, z, color] of [
-    [-7.6, -3.0, '#5ff2e0'],
-    [7.2, -3.8, '#ffd45f'],
-    [-3.9, -6.9, '#ffd45f'],
-    [3.6, -7.2, '#5ff2e0'],
-  ]) {
-    const crystals = createCrystalCluster(rand, { color });
-    crystals.position.set(x, -0.8, z);
-    island.add(crystals);
-  }
-
   bakeStatic(island);
 
   // --- Pièces du token en orbite ---
   const coins = [];
-  for (let i = 0; i < 7; i++) {
+  for (let i = 0; i < 4; i++) {
     const coin = createCoin({ radius: 0.42, thickness: 0.11 });
     coin.userData.orbit = {
-      angle: (i / 7) * Math.PI * 2,
+      angle: (i / 4) * Math.PI * 2,
       speed: 0.12,
       rx: 7.2,
       rz: 5.2,
@@ -156,7 +152,7 @@ export function createWorld(scene) {
     const low = i < 5;
     const cloud = createCloud(rand, {
       scale: low ? 1.8 + rand() * 1.2 : 1.1 + rand() * 1.4,
-      color: low ? '#ffd9e2' : '#fff2f6',
+      color: low ? '#dff7ff' : '#ffffff',
     });
     cloud.position.set(Math.cos(a) * r, low ? -6 - rand() * 2 : 1 + rand() * 9, Math.sin(a) * r);
     cloud.userData.drift = 0.15 + rand() * 0.25;
@@ -166,9 +162,9 @@ export function createWorld(scene) {
   }
 
   // --- Particules : pétales et lucioles ---
-  const petals = createPetals(rand, 140);
+  const petals = createPetals(rand, 52);
   scene.add(petals.mesh);
-  const fireflies = createFireflies(rand, 70);
+  const fireflies = createFireflies(rand, 36);
   scene.add(fireflies.points);
 
   // --- Ambiance : thèmes et transitions ---
@@ -337,6 +333,24 @@ function lerpState(from, to, k, out) {
 function createIslandBody(rand) {
   const g = new THREE.Group();
 
+  // Lagon et liseré de sable, opaques et peu coûteux : deux seules surfaces.
+  const lagoon = toonMesh(
+    new THREE.RingGeometry(4.78, 8.72, 72),
+    toonMaterial({ color: '#35c7c4', ramp: RAMPS.soft, rim: 0.42, rimColor: '#c8fff1' }),
+    { outline: null, cast: false, receive: true },
+  );
+  lagoon.rotation.x = -Math.PI / 2;
+  lagoon.position.y = -0.7;
+  g.add(lagoon);
+  const sand = toonMesh(
+    new THREE.RingGeometry(4.48, 5.0, 72),
+    toonMaterial({ color: '#e8cd84', ramp: RAMPS.soft, rim: 0.22 }),
+    { outline: null, cast: false },
+  );
+  sand.rotation.x = -Math.PI / 2;
+  sand.position.y = -0.675;
+  g.add(sand);
+
   // Plateau herbeux au bord irrégulier
   const grassGeo = new THREE.CylinderGeometry(9.2, 9.0, 0.5, 64, 1);
   const p = grassGeo.attributes.position;
@@ -355,7 +369,7 @@ function createIslandBody(rand) {
   // elles ne tomberaient que sur la roche, hors champ (autant de moins dans la carte d'ombre).
   const grass = toonMesh(
     grassGeo,
-    toonMaterial({ color: '#86d96a', ramp: RAMPS.hard, rim: 0.35, rimColor: '#f0ffd0' }),
+    toonMaterial({ color: '#4eaa66', ramp: RAMPS.hard, rim: 0.35, rimColor: '#c9f49a' }),
     { outline: OUTLINE, cast: false },
   );
   grass.position.y = -1.05;
@@ -365,7 +379,7 @@ function createIslandBody(rand) {
   const rockGeo = new THREE.CylinderGeometry(9.0, 1.2, 7.5, 18, 7);
   const rp = rockGeo.attributes.position;
   const colors = [];
-  const strata = ['#c99a86', '#b17f80', '#956a85', '#7b5884', '#664a7c'].map(
+  const strata = ['#b8aa92', '#968b7c', '#77766f', '#5d6870', '#46545d'].map(
     (c) => new THREE.Color(c),
   );
   const jitter = new Map();
@@ -399,7 +413,7 @@ function createIslandBody(rand) {
 
   // Rochers suspendus sous l'île
   for (let i = 0; i < 6; i++) {
-    const hanging = createRock(rand, { size: 0.6 + rand() * 0.6, color: '#8a6489' });
+    const hanging = createRock(rand, { size: 0.6 + rand() * 0.6, color: '#667078' });
     hanging.castShadow = false;
     const a = rand() * Math.PI * 2;
     hanging.position.set(Math.cos(a) * 3.2, -8.6 - rand() * 1.2, Math.sin(a) * 3.2);
@@ -413,7 +427,7 @@ function createIslandBody(rand) {
 function drawArenaFloor(ctx, size) {
   const c = size / 2;
   const R = size / 2;
-  ctx.fillStyle = '#f4e6d4';
+  ctx.fillStyle = '#d9d2c4';
   ctx.fillRect(0, 0, size, size);
 
   // Demi-terrains aux couleurs des équipes
@@ -421,15 +435,15 @@ function drawArenaFloor(ctx, size) {
   ctx.beginPath();
   ctx.arc(c, c, R * 0.98, 0, Math.PI * 2);
   ctx.clip();
-  ctx.fillStyle = 'rgba(67, 209, 255, 0.22)';
+  ctx.fillStyle = 'rgba(53, 183, 239, 0.14)';
   ctx.fillRect(0, 0, c, size);
-  ctx.fillStyle = 'rgba(255, 79, 123, 0.2)';
+  ctx.fillStyle = 'rgba(241, 93, 101, 0.13)';
   ctx.fillRect(c, 0, c, size);
   ctx.restore();
 
   // Dallage concentrique
   const rings = [0.98, 0.84, 0.68, 0.5, 0.3];
-  ctx.strokeStyle = 'rgba(80, 52, 110, 0.32)';
+  ctx.strokeStyle = 'rgba(43, 54, 63, 0.32)';
   ctx.lineWidth = size * 0.004;
   for (let i = 0; i < rings.length; i++) {
     const outer = rings[i] * R;
@@ -501,8 +515,8 @@ function drawArenaFloor(ctx, size) {
 
 function createArena() {
   const g = new THREE.Group();
-  const stone = toonMaterial({ color: '#e9d8c6', ramp: RAMPS.soft, rim: 0.25 });
-  const stoneDark = toonMaterial({ color: '#b9a0c4', ramp: RAMPS.soft, rim: 0.2 });
+  const stone = toonMaterial({ color: '#d8d0c1', ramp: RAMPS.soft, rim: 0.25 });
+  const stoneDark = toonMaterial({ color: '#817f7b', ramp: RAMPS.soft, rim: 0.2 });
   const gold = toonMaterial({
     color: '#ffc94a',
     ramp: RAMPS.soft,

@@ -80,16 +80,21 @@
       <!-- Écran titre -->
       <section id="screen-title" class="screen screen-title" aria-labelledby="game-title">
         <div class="title-top">
-          <h1 id="game-title" class="logo">
-            <span class="logo-word w-rock">Pierre</span>
-            <span class="logo-word w-paper">Feuille</span>
-            <span class="logo-word w-scissors">Ciseaux</span>
+          <h1 id="game-title" class="logo" aria-label="PFC Arena">
+            <span class="logo-hands" aria-hidden="true">
+              <svg viewBox="0 0 132 42" role="img">
+                <path d="M13 35c-6-5-8-13-3-18 3-3 7-2 9 1-1-8 2-13 7-13 4 0 6 3 6 7 1-7 4-10 8-9 5 1 6 7 4 15 4-5 9-4 11 0 3 6-2 15-10 19-12 7-24 6-32-2z" />
+                <path d="M76 34c-5-7-5-17 1-21 4-3 8-1 10 3V5c0-4 6-4 6 0v10-12c0-4 6-4 6 0v12-10c0-4 6-4 6 0v12-8c0-4 6-4 6 0v15c5-5 11-2 10 4-2 8-12 12-23 12-10 0-17-2-22-6z" />
+              </svg>
+            </span>
+            <span class="logo-word w-pfc">PFC</span>
+            <span class="logo-word w-arena">Arena</span>
           </h1>
-          <p class="tagline">Duel au sommet de l'arène céleste</p>
+          <p class="tagline">Pierre · Feuille · Ciseaux en 3D</p>
         </div>
         <div class="title-bottom">
           <button id="campaign-btn" class="btn btn-primary btn-xl" type="button">
-            Le tour des îles
+            Jouer
           </button>
           <p id="campaign-progress" class="campaign-progress"></p>
           <div class="quick-play">
@@ -99,8 +104,10 @@
               role="radiogroup"
               aria-label="Format de la partie rapide"
             ></div>
-            <button id="play-btn" class="btn btn-ghost" type="button">Partie rapide</button>
-            <button id="shop-btn" class="btn btn-ghost" type="button">Boutique</button>
+            <div class="title-secondary-actions">
+              <button id="play-btn" class="btn btn-ghost" type="button">Partie rapide</button>
+              <button id="shop-btn" class="btn btn-ghost" type="button">Boutique</button>
+            </div>
           </div>
           <p class="hint">
             Clavier : <kbd>1</kbd> ou <kbd>P</kbd> Pierre · <kbd>2</kbd> ou <kbd>F</kbd> Feuille ·
@@ -330,6 +337,13 @@
           aria-labelledby="end-title"
           aria-describedby="end-sub end-bonus end-reward end-note end-hint"
         >
+          <svg class="end-crown" viewBox="0 0 96 64" aria-hidden="true">
+            <path d="M10 52 4 15l24 17L48 4l20 28 24-17-6 37z" />
+            <path d="M12 52h72v8H12z" />
+            <circle cx="4" cy="13" r="4" />
+            <circle cx="48" cy="4" r="4" />
+            <circle cx="92" cy="13" r="4" />
+          </svg>
           <h2 id="end-title" class="end-title">Victoire !</h2>
           <p id="end-sub" class="end-sub"></p>
           <dl id="end-stats" class="end-stats"></dl>

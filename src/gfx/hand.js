@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
-import { RAMPS, glowSprite, toonMaterial, toonMesh } from './toon.js';
+import { RAMPS, toonMaterial, toonMesh } from './toon.js';
 import { ease } from '../core/tween.js';
 
 /**
@@ -12,7 +12,7 @@ import { ease } from '../core/tween.js';
  * les doigts se replient vers -Z (paume), le pouce est du côté +Y.
  */
 
-const PALM = { w: 0.78, h: 0.84, d: 0.46, r: 0.21 };
+const PALM = { w: 0.86, h: 0.9, d: 0.5, r: 0.23 };
 const PALM_FRONT = PALM.w / 2 - 0.07;
 const ARM_LENGTH = 3.6;
 
@@ -39,7 +39,7 @@ export const POSES = {
     middle: [0, ...CURLED],
     ring: [-0.02, ...CURLED],
     pinky: [-0.04, 1.42, 1.58, 1.1],
-    thumb: [0.05, 0.42, 0.42],
+    thumb: [0.16, 0.62, 0.52],
   },
   paper: {
     index: [0.17, 0.04, 0.05, 0.03],
@@ -74,26 +74,26 @@ export const POSES = {
 
 export const HAND_PALETTES = {
   player: {
-    glove: '#fff4e4',
-    stitch: '#d8b9a8',
-    cuff: '#43d1ff',
-    cuffLip: '#e9fbff',
-    sleeve: '#2f63f0',
-    sleeveDark: '#1f3fae',
-    accent: '#ffd23f',
-    outline: '#1d1840',
+    glove: '#f6f2e8',
+    stitch: '#c9b9aa',
+    cuff: '#35b7ef',
+    cuffLip: '#e7f7ff',
+    sleeve: '#247fd0',
+    sleeveDark: '#14539f',
+    accent: '#ffd34d',
+    outline: '#0b1a2e',
     glove_spec: 0,
   },
   bot: {
-    glove: '#e6e9f8',
-    stitch: '#a9b0cf',
-    cuff: '#ff4f7b',
-    cuffLip: '#ffe1ea',
-    sleeve: '#4a4470',
-    sleeveDark: '#2f2a4a',
-    accent: '#ff4f7b',
-    outline: '#1d1840',
-    glove_spec: 0.55,
+    glove: '#f1eee8',
+    stitch: '#c8b8ad',
+    cuff: '#f15d65',
+    cuffLip: '#ffe7e2',
+    sleeve: '#d84554',
+    sleeveDark: '#9e2639',
+    accent: '#ffd34d',
+    outline: '#0b1a2e',
+    glove_spec: 0.15,
   },
 };
 
@@ -133,6 +133,17 @@ function segmentGeometry(radius, length) {
     const geo = new THREE.CapsuleGeometry(radius, length, 8, 16);
     geo.rotateZ(-Math.PI / 2);
     geo.translate(length / 2, 0, 0);
+    // Une phalange légèrement effilée et comprimée sur la paume donne une
+    // continuité organique, loin de l'aspect « tubes assemblés ».
+    const p = geo.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i);
+      const t = THREE.MathUtils.clamp((x + radius) / (length + radius * 2), 0, 1);
+      const taper = THREE.MathUtils.lerp(1.06, 0.9, t);
+      const pad = 1 + Math.sin(t * Math.PI) * 0.06;
+      p.setXYZ(i, x, p.getY(i) * taper, p.getZ(i) * taper * pad);
+    }
+    geo.computeVertexNormals();
     return geo;
   });
 }
@@ -212,12 +223,17 @@ export class HandRig {
         specSize: 0.94,
       }),
       stitch: toonMaterial({ color: p.stitch, rim: 0 }),
-      cuff: toonMaterial({ color: p.cuff, rim: 0.3, spec: 0.35 }),
+      cuff: toonMaterial({
+        color: p.cuff,
+        emissive: p.accent,
+        emissiveIntensity: 0,
+        rim: 0.3,
+        spec: 0.35,
+      }),
       cuffLip: toonMaterial({ color: p.cuffLip, rim: 0.2 }),
       sleeve: toonMaterial({ color: p.sleeve, rim: 0.4, rimColor: '#c9d8ff' }),
       sleeveDark: toonMaterial({ color: p.sleeveDark, rim: 0.35, spec: 0.4 }),
       accent: toonMaterial({ color: p.accent, rim: 0.3, spec: 0.6, specSize: 0.9 }),
-      led: new THREE.MeshBasicMaterial({ color: p.accent }),
     };
     this.outline = { color: p.outline, thickness: 2.4 };
     this.thinOutline = { color: p.outline, thickness: 1.4 };
@@ -236,8 +252,7 @@ export class HandRig {
     mats.sleeve.color.set(p.sleeve);
     mats.sleeveDark.color.set(p.sleeveDark);
     mats.accent.color.set(p.accent);
-    mats.led.color.set(p.accent);
-    this.ledGlow?.material.color.set(p.accent);
+    mats.cuff.emissive.set(p.accent);
   }
 
   #buildHand() {
@@ -250,6 +265,14 @@ export class HandRig {
     const palmMesh = toonMesh(palmGeometry(), glove, { outline: this.outline });
     this.palm.add(palmMesh);
 
+    // Coussin de paume et volumes de jointure raccordent visuellement les doigts.
+    const palmPad = toonMesh(new THREE.SphereGeometry(0.31, 18, 12), glove, {
+      outline: this.thinOutline,
+    });
+    palmPad.scale.set(1.05, 0.95, 0.42);
+    palmPad.position.set(0.06, -0.03, -PALM.d * 0.43);
+    this.palm.add(palmPad);
+
     // Les trois coutures emblématiques sur le dos du gant
     const stitchGeo = segmentGeometry(0.018, 0.3);
     for (const y of [-0.17, 0, 0.17]) {
@@ -260,6 +283,14 @@ export class HandRig {
     }
 
     for (const finger of FINGERS) {
+      const knuckle = toonMesh(
+        new THREE.SphereGeometry(finger.radius * 1.2, 14, 10),
+        glove,
+        { outline: this.thinOutline },
+      );
+      knuckle.scale.set(1.2, 1, 0.86);
+      knuckle.position.set(PALM_FRONT - 0.015, finger.y, 0.025);
+      this.palm.add(knuckle);
       const base = new THREE.Group();
       base.position.set(PALM_FRONT, finger.y, 0);
       this.palm.add(base);
@@ -307,10 +338,26 @@ export class HandRig {
     lip.rotation.y = Math.PI / 2;
     lip.position.x = 0.32 - 0.34;
     this.wrist.add(lip);
+
+    // Écusson géométrique, lisible dans les trois poses et des deux côtés.
+    const badge = toonMesh(new THREE.CylinderGeometry(0.17, 0.17, 0.035, 28), this.mats.sleeveDark, {
+      outline: this.thinOutline,
+      cast: false,
+    });
+    badge.rotation.x = Math.PI / 2;
+    badge.position.set(0.22, 0.02, PALM.d + 0.035);
+    this.wrist.add(badge);
+    const mark = toonMesh(new THREE.OctahedronGeometry(0.095, 0), this.mats.accent, {
+      outline: null,
+      cast: false,
+    });
+    mark.scale.set(1, 0.72, 0.16);
+    mark.position.set(0.22, 0.02, PALM.d + 0.066);
+    this.wrist.add(mark);
   }
 
   #buildArm() {
-    const { sleeve, sleeveDark, accent, led } = this.mats;
+    const { sleeve, sleeveDark, accent } = this.mats;
     const sleeveLength = ARM_LENGTH + 4.5;
     const sleeveMesh = toonMesh(segmentGeometry(0.34, sleeveLength), sleeve, {
       outline: this.outline,
@@ -318,48 +365,19 @@ export class HandRig {
     sleeveMesh.position.x = -sleeveLength;
     this.arm.add(sleeveMesh);
 
-    if (this.team === 'player') {
-      // Manche en tissu : bandes et coutures
-      for (const [x, mat] of [
-        [-0.32, sleeveDark],
-        [-0.62, accent],
-        [-0.86, sleeveDark],
-      ]) {
-        const band = toonMesh(new THREE.TorusGeometry(0.345, 0.05, 10, 40), mat, {
-          outline: this.thinOutline,
-        });
-        band.rotation.y = Math.PI / 2;
-        band.position.x = x;
-        this.arm.add(band);
-      }
-    } else {
-      // Bras robotique : anneaux segmentés, rivets et LED
-      for (let i = 0; i < 4; i++) {
-        const x = -0.3 - i * 0.55;
-        const ring = toonMesh(
-          new THREE.CylinderGeometry(0.39, 0.39, 0.16, 32).rotateZ(Math.PI / 2),
-          sleeveDark,
-          { outline: this.thinOutline },
-        );
-        ring.position.x = x;
-        this.arm.add(ring);
-        for (let k = 0; k < 6; k++) {
-          const a = (k / 6) * Math.PI * 2 + i * 0.4;
-          const rivet = toonMesh(new THREE.SphereGeometry(0.035, 10, 8), accent, {
-            outline: null,
-            cast: false,
-          });
-          rivet.position.set(x, Math.cos(a) * 0.395, Math.sin(a) * 0.395);
-          this.arm.add(rivet);
-        }
-      }
-      this.ledRing = new THREE.Mesh(new THREE.TorusGeometry(0.352, 0.03, 8, 48), led);
-      this.ledRing.rotation.y = Math.PI / 2;
-      this.ledRing.position.x = -0.58;
-      this.arm.add(this.ledRing);
-      this.ledGlow = glowSprite(this.palette.accent, 1.3, 0.35);
-      this.ledGlow.position.set(-0.58, 0, 0.2);
-      this.arm.add(this.ledGlow);
+    // Les deux adversaires portent désormais de vraies manchettes textiles :
+    // bleue côté joueur, rouge côté adversaire, avec un filet doré commun.
+    for (const [x, material, radius] of [
+      [-0.32, sleeveDark, 0.052],
+      [-0.58, accent, 0.044],
+      [-0.82, sleeveDark, 0.052],
+    ]) {
+      const band = toonMesh(new THREE.TorusGeometry(0.345, radius, 10, 40), material, {
+        outline: this.thinOutline,
+      });
+      band.rotation.y = Math.PI / 2;
+      band.position.x = x;
+      this.arm.add(band);
     }
   }
 
@@ -422,11 +440,8 @@ export class HandRig {
     this.root.position.copy(this.basePosition).addScaledVector(this.forward, m.push);
     this.root.position.y += m.drop;
 
-    if (this.ledRing) {
-      const pulse = 0.55 + 0.45 * Math.sin(time * (3 + m.glow * 9));
-      this.ledGlow.material.opacity = 0.18 + 0.4 * pulse * (0.5 + m.glow);
-      this.ledRing.material.color.set(this.palette.accent).multiplyScalar(0.75 + 0.5 * pulse);
-    }
+    const pulse = 0.55 + 0.45 * Math.sin(time * (3 + m.glow * 9));
+    this.mats.cuff.emissiveIntensity = m.glow * (0.1 + pulse * 0.22);
   }
 
   // --- Animations de haut niveau (toutes asynchrones) ---

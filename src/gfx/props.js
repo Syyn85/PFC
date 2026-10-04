@@ -6,8 +6,8 @@ import { RAMPS, canvasTexture, glowSprite, toonMaterial, toonMesh } from './toon
  * cristaux, pièces du token, torii, nuages…
  */
 
-const OUTLINE = { color: '#231a3d', thickness: 2 };
-const THIN = { color: '#231a3d', thickness: 1.3 };
+const OUTLINE = { color: '#0b1a2e', thickness: 2 };
+const THIN = { color: '#0b1a2e', thickness: 1.3 };
 
 const mats = {};
 function mat(key, params) {
@@ -75,14 +75,14 @@ export function createCrystalCluster(rand, { color = '#5ff2e0' } = {}) {
 // --- Arbres ------------------------------------------------------------------
 
 const FOLIAGE = [
-  ['#ff9cc8', '#ffc7df'], // cerisier
-  ['#ff86b6', '#ffb8d6'],
-  ['#8fe3b5', '#c6f5d8'], // menthe
+  ['#3f9b5f', '#a5e37b'],
+  ['#2f7f55', '#80cf68'],
+  ['#58ad63', '#b8ea82'],
 ];
 
 export function createTree(rand, { scale = 1 } = {}) {
   const tree = new THREE.Group();
-  const trunkMat = mat('trunk', { color: '#7a4a5a', ramp: RAMPS.hard, rim: 0.15 });
+  const trunkMat = mat('trunk', { color: '#75513d', ramp: RAMPS.hard, rim: 0.15 });
   const trunkHeight = 1.4 + rand() * 0.6;
   const trunk = toonMesh(
     new THREE.CylinderGeometry(0.1, 0.18, trunkHeight, 8).translate(0, trunkHeight / 2, 0),
@@ -117,6 +117,102 @@ export function createTree(rand, { scale = 1 } = {}) {
   tree.scale.setScalar(scale);
   tree.rotation.y = rand() * Math.PI * 2;
   return tree;
+}
+
+/** Palmier bas-poly : silhouette franche, peu de pièces et matériaux partagés. */
+export function createPalmTree(rand, { scale = 1 } = {}) {
+  const palm = new THREE.Group();
+  const trunkMat = mat('palm-trunk', { color: '#a06d3e', ramp: RAMPS.hard, rim: 0.18 });
+  const leafMat = mat('palm-leaf', {
+    color: '#24885d',
+    ramp: RAMPS.soft,
+    rim: 0.4,
+    rimColor: '#a7ef8b',
+  });
+  const coconutMat = mat('palm-coconut', { color: '#704322', ramp: RAMPS.hard, rim: 0.15 });
+  const height = 2.1 + rand() * 0.45;
+
+  for (let i = 0; i < 4; i++) {
+    const y = (i + 0.5) * (height / 4);
+    const segment = toonMesh(
+      new THREE.CylinderGeometry(0.115 - i * 0.012, 0.15 - i * 0.012, height / 3.65, 8),
+      trunkMat,
+      { outline: THIN },
+    );
+    segment.position.set(Math.sin(i * 0.45) * 0.08, y, 0);
+    segment.rotation.z = -0.055 + i * 0.022;
+    palm.add(segment);
+  }
+
+  const crown = new THREE.Group();
+  crown.position.set(0.11, height, 0);
+  palm.add(crown);
+  for (let i = 0; i < 7; i++) {
+    const a = (i / 7) * Math.PI * 2 + rand() * 0.18;
+    const leaf = toonMesh(new THREE.ConeGeometry(0.26, 1.7, 5), leafMat, {
+      outline: THIN,
+      cast: false,
+    });
+    leaf.scale.set(1, 1, 0.35);
+    leaf.rotation.order = 'YXZ';
+    leaf.rotation.y = a;
+    leaf.rotation.z = Math.PI / 2 + 0.28;
+    leaf.position.set(Math.cos(a) * 0.72, -0.18, Math.sin(a) * 0.72);
+    crown.add(leaf);
+  }
+  for (let i = 0; i < 3; i++) {
+    const coconut = toonMesh(new THREE.SphereGeometry(0.13, 10, 7), coconutMat, {
+      outline: THIN,
+    });
+    const a = (i / 3) * Math.PI * 2;
+    coconut.position.set(Math.cos(a) * 0.18, -0.16, Math.sin(a) * 0.18);
+    crown.add(coconut);
+  }
+  palm.scale.setScalar(scale);
+  palm.rotation.y = rand() * Math.PI * 2;
+  return palm;
+}
+
+/** Ruines d'aventure servant de cadre, avec deux bannières d'équipe. */
+export function createRuinGate() {
+  const g = new THREE.Group();
+  const stone = mat('ruin-stone', { color: '#9a9384', ramp: RAMPS.hard, rim: 0.25 });
+  const stoneLight = mat('ruin-stone-light', { color: '#c8bda8', ramp: RAMPS.soft, rim: 0.25 });
+  const bannerMats = [
+    mat('banner-blue', { color: '#238fc9', ramp: RAMPS.soft, rim: 0.25 }),
+    mat('banner-red', { color: '#d84b55', ramp: RAMPS.soft, rim: 0.25 }),
+  ];
+
+  for (const [side, bannerMat] of [[-1, bannerMats[0]], [1, bannerMats[1]]]) {
+    const tower = new THREE.Group();
+    tower.position.x = side * 3.35;
+    for (let i = 0; i < 5; i++) {
+      const block = toonMesh(new THREE.BoxGeometry(0.86, 0.66, 0.86), i % 2 ? stoneLight : stone, {
+        outline: OUTLINE,
+      });
+      block.position.set((i % 2) * 0.05 * side, 0.33 + i * 0.62, 0);
+      block.rotation.y = (i % 2 ? 1 : -1) * 0.035;
+      tower.add(block);
+    }
+    const cap = toonMesh(new THREE.BoxGeometry(1.08, 0.24, 1.04), stoneLight, { outline: OUTLINE });
+    cap.position.y = 3.27;
+    tower.add(cap);
+    const pole = toonMesh(new THREE.CylinderGeometry(0.035, 0.035, 2.3, 8), stone, {
+      outline: THIN,
+      cast: false,
+    });
+    pole.position.set(0, 4.4, 0);
+    tower.add(pole);
+    const banner = toonMesh(new THREE.PlaneGeometry(0.78, 1.35), bannerMat, {
+      outline: THIN,
+      cast: false,
+    });
+    banner.position.set(-0.43 * side, 4.25, 0.03);
+    banner.rotation.y = side < 0 ? 0.08 : -0.08;
+    tower.add(banner);
+    g.add(tower);
+  }
+  return g;
 }
 
 // --- Lanterne de pierre (tōrō) -----------------------------------------------
@@ -318,7 +414,7 @@ export function createCloud(rand, { scale = 1, color = '#fff0f4' } = {}) {
     const r = 0.8 + rand() * 0.9;
     // Tessellation légère : nuages lointains, le contour lissé garde la silhouette ronde
     const puff = toonMesh(new THREE.SphereGeometry(r, 10, 7), material, {
-      outline: { color: '#8f5f9e', thickness: 1.6 },
+      outline: { color: '#6c8da7', thickness: 1.6 },
       cast: false,
       receive: false,
     });
@@ -345,7 +441,7 @@ export function createIslet(rand, { radius = 1.2 } = {}) {
   );
   const rock = toonMesh(
     rockGeo,
-    mat('islet-rock', { color: '#b98a8f', flatShading: true, ramp: RAMPS.hard, rim: 0.25 }),
+    mat('islet-rock', { color: '#78838a', flatShading: true, ramp: RAMPS.hard, rim: 0.25 }),
     {
       outline: OUTLINE,
     },

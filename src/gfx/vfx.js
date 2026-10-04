@@ -126,7 +126,7 @@ export class Effects {
     this.confetti = new ParticlePool(
       new THREE.PlaneGeometry(0.13, 0.07),
       new THREE.MeshBasicMaterial({ color: '#ffffff', side: THREE.DoubleSide }),
-      320,
+      160,
     );
     // Pièces
     this.coins = new ParticlePool(
@@ -143,7 +143,7 @@ export class Effects {
     this.burst = new THREE.Group();
     this.burstInk = new THREE.Mesh(
       starGeo,
-      new THREE.MeshBasicMaterial({ color: '#231a3d', transparent: true, depthTest: false }),
+      new THREE.MeshBasicMaterial({ color: '#0b1a2e', transparent: true, depthTest: false }),
     );
     this.burstInk.scale.setScalar(1.14);
     this.burstFill = new THREE.Mesh(
@@ -309,10 +309,11 @@ export class Effects {
 
   /** Pluie de confettis (victoire). */
   celebrate(origin, count = 120) {
-    const palette = ['#43d1ff', '#ffd23f', '#ff4f7b', '#7cf29a', '#b88bff', '#ffffff'].map(
+    const palette = ['#35b7ef', '#ffd34d', '#f15d65', '#65d98a', '#f6f2e8'].map(
       (c) => new THREE.Color(c),
     );
-    for (let i = 0; i < count; i++) {
+    const limitedCount = Math.min(count, 96);
+    for (let i = 0; i < limitedCount; i++) {
       this.confetti.spawn({
         pos: new THREE.Vector3(origin.x + (Math.random() - 0.5) * 1.5, origin.y, origin.z),
         vel: new THREE.Vector3(

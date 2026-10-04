@@ -3,22 +3,24 @@
  * des transitions (voir world.setTheme).
  */
 export const THEMES = {
+  // Ambiance principale (accueil, partie rapide) : île tropicale en plein après-midi,
+  // ciel bleu franc, lumière chaude, mer turquoise sous les îles.
   crepuscule: {
-    label: 'Crépuscule',
+    label: 'Île tropicale',
     sky: {
-      top: '#2a1f63',
-      mid: '#7b4bb3',
-      horizon: '#ffaf8c',
-      glow: '#ffd9a0',
-      below: '#c9779b',
-      sun: '#fff1c4',
+      top: '#1f6fd6',
+      mid: '#4fa8ef',
+      horizon: '#bfe8ff',
+      glow: '#fff3cf',
+      below: '#7fd0e0',
+      sun: '#fffbe8',
     },
-    fog: '#e79aa6',
-    sea: { deep: '#8a5aa8', mid: '#c27fb4', light: '#f2a8b8', foam: '#ffd6c9' },
-    hemi: { sky: '#d9ccff', ground: '#7a4a86', intensity: 1.15 },
-    key: { color: '#fff0dc', intensity: 2.9 },
-    stars: 0.6,
-    lanterns: 0.55,
+    fog: '#bfe3f2',
+    sea: { deep: '#1d8fb8', mid: '#29b3cf', light: '#6fd9de', foam: '#e9fffb' },
+    hemi: { sky: '#e6f4ff', ground: '#6f8a5c', intensity: 1.25 },
+    key: { color: '#fff1d8', intensity: 3.0 },
+    stars: 0,
+    lanterns: 0.75,
     aurora: 0,
     lightning: false,
   },

@@ -26,6 +26,11 @@ export class Hud {
       play: $('#play-btn'),
       formatPicker: $('#format-picker'),
       formats: [],
+      shopButton: $('#shop-btn'),
+      shop: $('#screen-shop'),
+      shopBack: $('#shop-back'),
+      shopBalance: $('#shop-balance'),
+      shopList: $('#shop-list'),
       map: $('#screen-map'),
       mapBack: $('#map-back'),
       islands: $('#island-list'),
@@ -115,6 +120,8 @@ export class Hud {
     const clicks = {
       campaign: 'openMap',
       play: 'quickMatch',
+      shopButton: 'shopOpen',
+      shopBack: 'shopClose',
       mapBack: 'closeMap',
       next: 'next',
       again: 'again',
@@ -126,6 +133,22 @@ export class Hud {
     for (const [key, event] of Object.entries(clicks)) {
       el[key].addEventListener('click', () => this.#emit(event));
     }
+    // Boutique : action sur un gant, et essayage au survol ou au focus
+    el.shopList.addEventListener('click', (event) => {
+      const action = event.target.closest('.glove-action');
+      if (action && !action.disabled) this.#emit('shopAction', action.dataset.id);
+    });
+    const preview = (event) => {
+      const glove = event.target.closest?.('.glove');
+      if (glove) this.#emit('shopPreview', glove.dataset.id);
+    };
+    el.shopList.addEventListener('pointerover', preview);
+    el.shopList.addEventListener('focusin', preview);
+    // Au doigt, le pointeur « quitte » la liste dès qu'on le lève : l'essayage reste alors
+    // affiché jusqu'au prochain gant touché
+    el.shopList.addEventListener('pointerleave', (event) => {
+      if (event.pointerType !== 'touch') this.#emit('shopPreview', null);
+    });
     el.islands.addEventListener('click', (event) => {
       const island = event.target.closest('.island');
       if (island && !island.disabled) this.#emit('island', island.dataset.id);
@@ -180,6 +203,9 @@ export class Hud {
       } else if (key === 'escape' && !el.draft.hidden) {
         event.preventDefault();
         this.#emit('draftCancel');
+      } else if (key === 'escape' && !el.shop.hidden) {
+        event.preventDefault();
+        this.#emit('shopClose');
       }
     });
   }
@@ -316,6 +342,67 @@ export class Hud {
         return li;
       }),
     );
+  }
+
+  // --- Boutique de gants ---
+
+  showShop(visible) {
+    this.el.shop.hidden = !visible;
+    if (!visible) this.el.shopButton.focus({ preventScroll: true });
+  }
+
+  /**
+   * entries : [{ glove, status, icon, missing }]
+   * status : 'equipped' | 'owned' | 'buyable' | 'tooExpensive' | 'locked'
+   * focusId : gant dont le bouton reprend le focus après une action.
+   */
+  renderShop(entries, { balance, symbol, focusId = null }) {
+    const { el } = this;
+    el.shopBalance.textContent = `Solde : ${balance.toLocaleString('fr-FR')} ${symbol}`;
+    el.shopList.replaceChildren(
+      ...entries.map(({ glove, status, icon, missing }) => {
+        const item = create('li', `glove is-${status}`);
+        item.dataset.id = glove.id;
+        const art = create('img', 'glove-art');
+        art.alt = '';
+        art.src = icon;
+        const info = create('div', 'glove-info');
+        info.append(
+          create('h3', 'glove-name', glove.name),
+          create('p', 'glove-desc', glove.description),
+        );
+        if (glove.kind === 'trophy') info.append(create('span', 'tag', 'Trophée de campagne'));
+        const action = create('button', 'btn glove-action');
+        action.type = 'button';
+        action.dataset.id = glove.id;
+        const label = {
+          equipped: 'Équipé',
+          owned: 'Équiper',
+          buyable: `Acheter · ${glove.price} ${symbol}`,
+          tooExpensive: `${glove.price} ${symbol}`,
+          locked: `Bats ${glove.unlockName}`,
+        }[status];
+        action.textContent = label;
+        action.disabled = ['equipped', 'tooExpensive', 'locked'].includes(status);
+        action.classList.add(status === 'buyable' ? 'btn-primary' : 'btn-ghost');
+        action.setAttribute('aria-label', `${glove.name} : ${label}`);
+        item.append(art, info, action);
+        if (status === 'tooExpensive') {
+          item.append(create('p', 'glove-missing', `Il te manque ${missing} ${symbol}`));
+        }
+        return item;
+      }),
+    );
+    // Le rendu remplace la liste : on rend le focus au gant concerné
+    if (!focusId) return;
+    const item = el.shopList.querySelector(`.glove[data-id="${focusId}"]`);
+    const button = item?.querySelector('.glove-action');
+    if (button && !button.disabled) {
+      button.focus({ preventScroll: true });
+    } else if (item) {
+      item.tabIndex = -1;
+      item.focus({ preventScroll: true });
+    }
   }
 
   // --- Choix des atouts avant le match ---

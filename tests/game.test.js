@@ -7,6 +7,7 @@ import { CAMPAIGN, nextOpponent } from '../src/game/opponents.js';
 import { memoryStorage } from '../src/core/storage.js';
 import { DemoWallet } from '../src/web3/wallet.js';
 import { keyToBoost, keyToMove } from '../src/ui/keys.js';
+import { DEFAULT_GLOVE, GLOVES, Wardrobe, findGlove } from '../src/game/cosmetics.js';
 import {
   createCommitment,
   secureRandomInt,
@@ -388,6 +389,106 @@ describe('stockage indisponible ou plein', () => {
     match.playRound('rock', 'paper');
     match.playRound('rock', 'paper');
     expect(match.bestStreak).toBe(0);
+  });
+});
+
+describe('boutique de gants', () => {
+  const progressWith = (...cleared) => ({ isCleared: (id) => cleared.includes(id) });
+  const fundedWallet = (storage, amount) => {
+    const wallet = new DemoWallet({ storage });
+    wallet.credit(amount, 'test');
+    return wallet;
+  };
+
+  it('catalogue cohérent : identifiants uniques, prix et palettes définis', () => {
+    expect(new Set(GLOVES.map((g) => g.id)).size).toBe(GLOVES.length);
+    expect(findGlove(DEFAULT_GLOVE).price).toBe(0);
+    for (const glove of GLOVES) {
+      expect(glove.price).toBeGreaterThanOrEqual(0);
+      expect(typeof glove.palette).toBe('object');
+    }
+    expect(GLOVES.filter((g) => g.kind === 'trophy')).toHaveLength(CAMPAIGN.length);
+  });
+
+  it('dépense : refuse sans débiter si le solde ne suffit pas', () => {
+    const wallet = fundedWallet(memoryStorage(), 100);
+    expect(wallet.spend(150, 'trop cher')).toBe(false);
+    expect(wallet.balance).toBe(100);
+    expect(wallet.spend(60, 'ok')).toBe(true);
+    expect(wallet.balance).toBe(40);
+  });
+
+  it('achète, équipe automatiquement et ne revend pas deux fois', () => {
+    const storage = memoryStorage();
+    const wallet = fundedWallet(storage, 400);
+    const wardrobe = new Wardrobe({ storage });
+    const progress = progressWith();
+    expect(wardrobe.status('menthe', { progress, balance: wallet.balance })).toBe('buyable');
+    expect(wardrobe.buy('menthe', wallet, progress)).toEqual({ ok: true });
+    expect(wallet.balance).toBe(250);
+    expect(wardrobe.equippedGlove(progress).id).toBe('menthe');
+    expect(wardrobe.buy('menthe', wallet, progress)).toEqual({ ok: false, reason: 'owned' });
+    expect(wallet.balance).toBe(250);
+    expect(wardrobe.status('or', { progress, balance: wallet.balance })).toBe('tooExpensive');
+    expect(wardrobe.buy('or', wallet, progress)).toEqual({ ok: false, reason: 'funds' });
+    expect(wardrobe.owned.has('or')).toBe(false);
+  });
+
+  it("les trophées se gagnent en libérant l'île, pas en jetons", () => {
+    const storage = memoryStorage();
+    const wallet = fundedWallet(storage, 1000);
+    const wardrobe = new Wardrobe({ storage });
+    expect(wardrobe.status('trophee-roc', { progress: progressWith(), balance: 1000 })).toBe(
+      'locked',
+    );
+    expect(wardrobe.buy('trophee-roc', wallet, progressWith())).toEqual({
+      ok: false,
+      reason: 'notForSale',
+    });
+    expect(wardrobe.equip('trophee-roc', progressWith())).toBe(false);
+    expect(wardrobe.equip('trophee-roc', progressWith('roc'))).toBe(true);
+    expect(wallet.balance).toBe(1000);
+    // Sans l'île libérée (autre sauvegarde), on retombe sur le gant classique
+    expect(wardrobe.equippedGlove(progressWith()).id).toBe(DEFAULT_GLOVE);
+  });
+
+  it('nomme les trophées en bon français', () => {
+    const names = Object.fromEntries(
+      GLOVES.filter((g) => g.kind === 'trophy').map((g) => [g.unlock, g.name]),
+    );
+    expect(names.roc).toBe('Gant du Roc');
+    expect(names.echo).toBe('Gant d’Écho');
+    expect(names.malin).toBe('Gant du Malin');
+    expect(names.oracle).toBe('Gant de l’Oracle');
+    expect(names.kitsune).toBe('Gant de Kitsune');
+  });
+
+  it('deux onglets partagent achats et solde', () => {
+    const storage = memoryStorage();
+    const progress = progressWith();
+    fundedWallet(storage, 500);
+    const tabA = { wallet: new DemoWallet({ storage }), wardrobe: new Wardrobe({ storage }) };
+    const tabB = { wallet: new DemoWallet({ storage }), wardrobe: new Wardrobe({ storage }) };
+    expect(tabA.wardrobe.buy('menthe', tabA.wallet, progress).ok).toBe(true);
+    expect(tabB.wardrobe.buy('sakura', tabB.wallet, progress).ok).toBe(true);
+    expect(tabB.wallet.balance).toBe(150);
+    const reloaded = new Wardrobe({ storage });
+    expect(reloaded.isOwned('menthe', progress) && reloaded.isOwned('sakura', progress)).toBe(true);
+  });
+
+  it('le solde reste juste quand le stockage est plein', () => {
+    const data = new Map([['pfc:demo-wallet', JSON.stringify({ balance: 300, history: [] })]]);
+    const storage = {
+      getItem: (key) => (data.has(key) ? data.get(key) : null),
+      setItem: () => {
+        throw new Error('QuotaExceededError');
+      },
+    };
+    const wallet = new DemoWallet({ storage });
+    expect(wallet.spend(200, 'achat')).toBe(true);
+    expect(wallet.spend(200, 'achat')).toBe(false);
+    wallet.credit(50, 'manche');
+    expect(wallet.balance).toBe(150);
   });
 });
 

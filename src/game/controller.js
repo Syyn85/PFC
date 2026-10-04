@@ -7,6 +7,7 @@ import { createCommitment, secureRandomInt, verifyCommitment } from './fairness.
 import { ALL_BOOSTS, Match, boostsFromDraft, computeRoundRewards, draftSize } from './match.js';
 import { CAMPAIGN, QUICK_MATCH, findOpponent, nextOpponent, pickLine } from './opponents.js';
 import { CampaignProgress, DailyRewards } from './progress.js';
+import { GLOVES, Wardrobe, findGlove } from './cosmetics.js';
 import { MOVES, MOVE_LABELS, verdictFor } from './rules.js';
 
 const COUNTDOWN = ['Pierre…', 'Feuille…', 'Ciseaux !'];
@@ -28,11 +29,33 @@ const randomMove = () => MOVES[secureRandomInt(MOVES.length)];
  * animations 3D, interface et sons.
  *
  * title ⇄ map → starting → drafting → committing → choosing → resolving → (committing… | ended)
+ * title ⇄ shop
  */
 export class GameController {
-  constructor({ engine, tweens, world, player, bot, effects, hud, sfx, music, wallet, portraits }) {
+  /**
+   * renderIcons : fonction (requêtes) → icônes, rendues depuis le modèle 3D (gfx/icons.js).
+   * Elle sert aux cartes de coup et à la boutique, aux couleurs du gant choisi.
+   */
+  constructor({
+    engine,
+    tweens,
+    world,
+    player,
+    bot,
+    effects,
+    hud,
+    sfx,
+    music,
+    wallet,
+    portraits,
+    renderIcons,
+  }) {
     Object.assign(this, { engine, tweens, world, player, bot, effects, hud, sfx, music, wallet });
     this.portraits = portraits;
+    this.renderIcons = renderIcons;
+    this.wardrobe = new Wardrobe();
+    this.gloveIcons = null;
+    this.cardGloveId = null;
     this.state = 'boot';
     this.formatId = CONFIG.game.defaultFormat;
     this.progress = new CampaignProgress(CAMPAIGN);
@@ -92,6 +115,13 @@ export class GameController {
         'menu',
         withAudio(() => (this.def === QUICK_MATCH ? this.enterTitle() : this.openMap())),
       )
+      .on(
+        'shopOpen',
+        withAudio(() => this.openShop()),
+      )
+      .on('shopClose', () => this.closeShop())
+      .on('shopAction', (id) => this.shopAction(id))
+      .on('shopPreview', (id) => this.#previewGlove(id))
       .on('draftToggle', () => this.sfx.click())
       .on('draftConfirm', (kinds) => this.#guard(this.#beginMatch(kinds)))
       .on('draftCancel', () => this.#cancelDraft())
@@ -145,6 +175,7 @@ export class GameController {
     hud.setFormat(this.formatId);
     hud.setSound(!sfx.muted);
     hud.setMusic(!music.muted);
+    this.#applyGlove();
   }
 
   /**
@@ -160,6 +191,88 @@ export class GameController {
       this.hud.toast('Oups, la partie a été interrompue. Retour au menu.');
       this.enterTitle();
     });
+  }
+
+  // --- Boutique de gants ----------------------------------------------------------
+
+  openShop() {
+    if (this.state !== 'title') return;
+    this.state = 'shop';
+    this.sfx.click();
+    this.wardrobe.reload();
+    this.progress.reload();
+    this.hud.showTitle(false);
+    this.hud.showShop(true);
+    // Rendu après l'affichage : le focus clavier part sur le gant équipé
+    this.#renderShop(this.wardrobe.equippedGlove(this.progress).id);
+  }
+
+  closeShop() {
+    if (this.state !== 'shop') return;
+    this.sfx.click();
+    this.#applyGlove(); // annule un éventuel essayage
+    // Le titre d'abord : le bouton Boutique doit être visible pour reprendre le focus
+    this.enterTitle();
+    this.hud.showShop(false);
+  }
+
+  shopAction(id) {
+    if (this.state !== 'shop') return;
+    const { wardrobe, progress, wallet, hud, sfx } = this;
+    const glove = findGlove(id);
+    if (!glove) return;
+    const status = wardrobe.status(id, { progress, balance: wallet.balance });
+    if (status === 'owned') {
+      wardrobe.equip(id, progress);
+      sfx.boost();
+      hud.announce(`${glove.name} équipé`);
+    } else if (status === 'buyable') {
+      const result = wardrobe.buy(id, wallet, progress);
+      if (result.ok) {
+        sfx.coin(0);
+        sfx.coin(0.15);
+        this.effects.celebrate(this.player.getFrontPosition(this._v).clone(), 60);
+        hud.announce(`${glove.name} acheté et équipé`);
+      } else if (result.reason === 'funds') {
+        hud.toast(`Il te manque ${glove.price - wallet.balance} ${SYMBOL} pour ${glove.name}.`);
+      }
+    }
+    this.#applyGlove();
+    this.#renderShop(id);
+  }
+
+  #renderShop(focusId = null) {
+    const { wardrobe, progress, wallet } = this;
+    // Icônes des gants rendues une seule fois, à la première ouverture
+    this.gloveIcons ??= this.renderIcons(
+      GLOVES.map((glove) => ({ key: glove.id, pose: 'paper', palette: glove.palette })),
+    );
+    const balance = wallet.balance;
+    const entries = GLOVES.map((glove) => ({
+      glove,
+      status: wardrobe.status(glove.id, { progress, balance }),
+      icon: this.gloveIcons[glove.id],
+      missing: Math.max(0, glove.price - balance),
+    }));
+    this.hud.renderShop(entries, { balance, symbol: SYMBOL, focusId });
+  }
+
+  /** Essayage : la main du joueur prend les couleurs du gant survolé. */
+  #previewGlove(id) {
+    if (this.state !== 'shop') return;
+    const glove = (id && findGlove(id)) || this.wardrobe.equippedGlove(this.progress);
+    this.player.setPalette(glove.palette);
+  }
+
+  /** Applique le gant équipé à la main du joueur et aux cartes de coup. */
+  #applyGlove() {
+    const glove = this.wardrobe.equippedGlove(this.progress);
+    this.player.setPalette(glove.palette);
+    if (glove.id === this.cardGloveId) return;
+    this.cardGloveId = glove.id;
+    this.hud.setCardArt(
+      this.renderIcons(MOVES.map((move) => ({ key: move, pose: move, palette: glove.palette }))),
+    );
   }
 
   // --- Navigation ---------------------------------------------------------------

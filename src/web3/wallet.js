@@ -18,7 +18,12 @@ import { readJSON, safeStorage, writeJSON } from '../core/storage.js';
  *   balance         solde affiché
  *   connect()       Promise<void>
  *   credit(n, why)  démo uniquement
+ *   spend(n, why)   démo uniquement (boutique de cosmétiques) ; false si solde insuffisant
  *   subscribe(fn)   notifié à chaque changement, retourne une fonction de désabonnement
+ *
+ * Chaque écriture incrémente `revision` : une sauvegarde plus ancienne que l'état
+ * en mémoire signifie qu'une écriture a échoué (stockage plein), et on garde la
+ * mémoire ; une sauvegarde plus récente vient d'un autre onglet, et on la reprend.
  */
 export class DemoWallet {
   mode = 'demo';
@@ -56,9 +61,22 @@ export class DemoWallet {
 
   credit(amount, reason) {
     if (!Number.isFinite(amount) || amount <= 0) return;
-    // Lecture-modification-écriture : ne jamais écraser un crédit fait ailleurs.
+    this.#apply(amount, reason);
+  }
+
+  /** Dépense des jetons de démo. Retourne false (sans rien débiter) si le solde ne suffit pas. */
+  spend(amount, reason) {
+    if (!Number.isFinite(amount) || amount <= 0) return false;
+    if (this.#load().balance < amount) return false;
+    this.#apply(-amount, reason);
+    return true;
+  }
+
+  // Lecture-modification-écriture : ne jamais écraser une opération faite ailleurs.
+  #apply(amount, reason) {
     const state = this.#load();
     state.balance += amount;
+    state.revision = (state.revision ?? 0) + 1;
     state.history.unshift({ amount, reason, at: Date.now() });
     state.history.length = Math.min(state.history.length, 50);
     this.#state = state;
@@ -79,10 +97,14 @@ export class DemoWallet {
   #load() {
     const saved = readJSON(this.storageKey, null, this.storage);
     const valid = saved && Number.isFinite(saved.balance) && Array.isArray(saved.history);
-    // Le solde de démo ne fait que croître : une sauvegarde plus basse que la
-    // mémoire signifie qu'une écriture a échoué (stockage plein), on garde la mémoire.
-    if (valid && !(this.#state && saved.balance < this.#state.balance)) return saved;
+    const savedRevision = valid ? (saved.revision ?? 0) : -1;
+    const memoryRevision = this.#state?.revision ?? 0;
+    if (valid && !(this.#state && savedRevision < memoryRevision)) {
+      return { ...saved, history: [...saved.history], revision: savedRevision };
+    }
     // Stockage indisponible ou en retard : on garde l'état en mémoire plutôt que de le perdre
-    return this.#state ?? { balance: 0, history: [] };
+    return this.#state
+      ? { ...this.#state, history: [...this.#state.history] }
+      : { balance: 0, history: [], revision: 0 };
   }
 }

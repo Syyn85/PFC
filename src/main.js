@@ -16,7 +16,6 @@ import { Sfx } from './audio/sfx.js';
 import { Music } from './audio/music.js';
 import { DemoWallet } from './web3/wallet.js';
 import { GameController } from './game/controller.js';
-import { MOVES } from './game/rules.js';
 import { CAMPAIGN } from './game/opponents.js';
 
 const HAND_HEIGHT = 1.55;
@@ -43,12 +42,11 @@ function boot() {
   sfx.onUnlock = () => music.start();
   const wallet = new DemoWallet();
 
-  // Icônes des cartes et portraits des adversaires, rendus depuis le modèle 3D
-  const icons = renderHandIcons([
-    ...MOVES.map((move) => ({ key: move, pose: move })),
-    ...CAMPAIGN.map((o) => ({ key: o.id, pose: o.pose, team: 'bot', palette: o.palette })),
-  ]);
-  hud.setCardArt(icons);
+  // Portraits des adversaires, rendus depuis le modèle 3D (les cartes de coup sont
+  // rendues par le contrôleur, aux couleurs du gant équipé)
+  const portraits = renderHandIcons(
+    CAMPAIGN.map((o) => ({ key: o.id, pose: o.pose, team: 'bot', palette: o.palette })),
+  );
 
   const game = new GameController({
     engine,
@@ -61,7 +59,8 @@ function boot() {
     sfx,
     music,
     wallet,
-    portraits: icons,
+    portraits,
+    renderIcons: renderHandIcons,
   });
   game.enterTitle();
   world.setTheme('crepuscule', 0);

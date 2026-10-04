@@ -100,12 +100,41 @@
               aria-label="Format de la partie rapide"
             ></div>
             <button id="play-btn" class="btn btn-ghost" type="button">Partie rapide</button>
+            <button id="shop-btn" class="btn btn-ghost" type="button">Boutique</button>
           </div>
           <p class="hint">
             Clavier : <kbd>1</kbd> ou <kbd>P</kbd> Pierre · <kbd>2</kbd> ou <kbd>F</kbd> Feuille ·
             <kbd>3</kbd> ou <kbd>C</kbd> Ciseaux · <kbd>B</kbd> Bouclier · <kbd>D</kbd> Double ·
             <kbd>E</kbd> Espion
           </p>
+        </div>
+      </section>
+
+      <!-- Boutique de gants -->
+      <section id="screen-shop" class="screen screen-shop" hidden aria-labelledby="shop-title">
+        <div
+          class="shop-panel"
+          role="dialog"
+          aria-labelledby="shop-title"
+          aria-describedby="shop-sub"
+        >
+          <header class="map-header">
+            <button id="shop-back" class="icon-btn" type="button" aria-label="Retour au menu">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path class="wave" d="M15 5l-7 7 7 7" />
+              </svg>
+            </button>
+            <div class="map-heading">
+              <h2 id="shop-title" class="map-title">Boutique de gants</h2>
+              <p id="shop-sub" class="map-sub">
+                Des gants purement décoratifs, sans effet sur le jeu.
+                <span class="hint-hover">Survole</span><span class="hint-touch">Touche</span> un
+                gant pour l'essayer sur ta main.
+              </p>
+            </div>
+          </header>
+          <p id="shop-balance" class="shop-balance"></p>
+          <ul id="shop-list" class="shop-list"></ul>
         </div>
       </section>
 

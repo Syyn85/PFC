@@ -45,6 +45,10 @@ revenir.
 - **Équité vérifiable (commit-reveal)** : avant ton choix, l'IA publie l'empreinte SHA-256
   de `coup:atout:sel`. Après la révélation, le sel est dévoilé et l'empreinte recalculée.
   C'est le schéma qu'utilisera le contrat on-chain.
+- **Boutique de gants** : des gants purement cosmétiques (aucun effet sur le jeu), à prix
+  fixe et affiché, sans tirage au sort, achetés avec les jetons de démo. Survoler (ou toucher)
+  un gant l'essaie sur la main 3D avant l'achat ; les cartes de coup prennent les couleurs du
+  gant équipé. Chaque île libérée offre en trophée le gant de son gardien.
 - **Récompenses** (démo) : manche gagnée, série de 3, match remporté, bonus de première
   victoire par île. Les gains contre l'IA sont **plafonnés par jour** (anti-farming), hors
   bonus d'île. Barème dans `src/config.js`.
@@ -86,6 +90,7 @@ src/
     bot.js            7 stratégies d'IA, décision d'atout, indice de l'Espion
     opponents.js      les gardiens de la campagne et la partie rapide
     progress.js       progression de campagne, plafond de gains quotidien
+    cosmetics.js      catalogue de gants, trophées, garde-robe (achat, équipement)
     fairness.js       commit-reveal SHA-256 (+ implémentation JS de secours)
     controller.js     orchestration logique ↔ 3D ↔ interface ↔ sons
   gfx/
@@ -102,7 +107,7 @@ src/
   audio/
     sfx.js            effets sonores synthétisés
     music.js          musique générative
-  web3/wallet.js      portefeuille démo + interface de la future intégration
+  web3/wallet.js      portefeuille démo (crédit, dépense) + interface de la future intégration
 tests/game.test.js    tests de la logique
 ```
 
@@ -132,6 +137,9 @@ Le jeu tourne aujourd'hui en mode démo (`DemoWallet`). Pour passer on-chain :
 4. **Contre l'IA**, le serveur doit détenir le sel et le coup engagés, sinon un joueur
    pourrait lire le coup de l'IA dans le code du navigateur. Le plafond quotidien et la
    progression de campagne devront aussi être tenus côté serveur.
+5. **Boutique** : les achats deviendront des paiements en token vers le contrat, et la
+   garde-robe sera lue sur la chaîne. Les prix restent fixes et visibles, sans tirage au
+   sort, pour ne pas tomber dans le modèle des « loot boxes ».
 
 ### Point d'attention réglementaire
 

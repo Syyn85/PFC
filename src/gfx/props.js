@@ -282,8 +282,9 @@ export function createCoin({ radius = 0.5, thickness = 0.12, outline = OUTLINE }
     spec: 0.8,
     specSize: 0.9,
   });
-  // Pièces en orbite haut au-dessus de l'île : leur ombre ne se verrait presque pas,
-  // on les laisse hors de la carte d'ombre (bord et faces).
+  // Choix de performance : les pièces en orbite ne projettent pas d'ombre (bord et
+  // faces). Leurs taches mobiles sur le bord de l'arène coûtaient 21 appels de rendu
+  // dans la passe d'ombre.
   g.add(toonMesh(coinGeometryCache[key], gold, { outline, cast: false }));
   const faceMat = mat('coin-face', {
     color: '#ffffff',

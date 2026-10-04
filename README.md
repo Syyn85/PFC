@@ -19,8 +19,9 @@ npm run build        # build de production dans dist/
 npm run build:single # un seul fichier HTML autonome dans dist-single/
 ```
 
-Clavier : `1` / `2` / `3` (ou `P` / `F` / `C`) pour jouer, `B` Bouclier, `D` Double,
-`E` Espion, `Entrée` pour ouvrir la campagne, `Échap` pour revenir.
+Clavier : `1` / `2` / `3` (touches physiques, donc aussi en AZERTY) ou `P` / `F` / `C` pour
+jouer, `B` Bouclier, `D` Double, `E` Espion, `Entrée` pour ouvrir la campagne, `Échap` pour
+revenir.
 
 ## Ce qui est en place
 
@@ -31,13 +32,16 @@ Clavier : `1` / `2` / `3` (ou `P` / `F` / `C`) pour jouer, `B` Bouclier, `D` Dou
   bonus de première victoire, et les dernières ajoutent chrono et atouts adverses. Un indice
   s'affiche après une défaite. La progression est sauvegardée sur l'appareil.
 - **Partie rapide** en BO3 / BO5 contre un adversaire qui apprend tes habitudes.
-- **Atouts**, une fois chacun par match. Bouclier et Double sont consommés même s'ils ne
-  servent pas : c'est un pari. Les derniers gardiens en possèdent aussi, et leur atout est
-  scellé dans l'engagement cryptographique.
+- **Atouts**, choisis avant chaque match : 1 en 2 manches gagnantes, 2 au-delà. Bouclier et
+  Double sont consommés même s'ils ne servent pas : c'est un pari. L'Espion ne se cumule pas
+  avec eux sur la même manche (sinon on ne pourrait plus perdre). Les derniers gardiens en
+  possèdent aussi, et leur atout est scellé dans l'engagement cryptographique.
   - **Bouclier** : si tu perds la manche, l'adversaire ne marque pas ;
   - **Double** : si tu gagnes la manche, elle vaut 2 points ;
   - **Espion** : révèle un coup que l'adversaire n'a pas joué.
-- **Chronomètre** de choix sur les îles avancées : sans réponse, un coup est joué au hasard.
+- **Chronomètre** de choix sur les îles avancées, en secondes réelles (indépendant de la
+  fluidité, en pause quand l'onglet est caché) : sans réponse, un coup est joué au hasard.
+- **Séries** de manches gagnées reportées d'un match gagné au suivant.
 - **Équité vérifiable (commit-reveal)** : avant ton choix, l'IA publie l'empreinte SHA-256
   de `coup:atout:sel`. Après la révélation, le sel est dévoilé et l'empreinte recalculée.
   C'est le schéma qu'utilisera le contrat on-chain.
@@ -57,8 +61,13 @@ Clavier : `1` / `2` / `3` (ou `P` / `F` / `C`) pour jouer, `B` Bouclier, `D` Dou
 - **Sons et musique** synthétisés en temps réel (Web Audio) : effets, et une musique
   pentatonique façon koto qui s'enrichit d'une rythmique en match. Coupables séparément.
 - **Responsive et adaptatif** : la caméra recadre la scène selon le format, et la résolution
-  baisse automatiquement si l'appareil n'atteint pas 45 images/s (`?qualite=max` pour
-  désactiver).
+  baisse si l'appareil n'atteint pas 45 images/s, puis remonte quand il redevient fluide
+  (`?qualite=max` pour désactiver).
+- **Accessible** : jouable entièrement au clavier, annonces pour lecteurs d'écran,
+  contrastes AA, réglage « animations réduites » respecté.
+- **Robuste** : sauvegardes relues avant écriture (plusieurs onglets), plafond et solde
+  conservés même si le stockage du navigateur est bloqué ou plein, retour au menu au lieu
+  d'un blocage en cas d'erreur.
 
 ## Architecture
 

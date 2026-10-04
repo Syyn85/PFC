@@ -9,7 +9,10 @@ const smoothstep = (a, b, x) => {
 // Résolution adaptative
 const MIN_PIXEL_RATIO = 0.75;
 const PIXEL_RATIO_STEP = 0.25;
-const MAX_FRAME = 0.25; // au-delà, image anormale (onglet masqué, appli en pause) : ignorée
+// Image anormale (appli mise en pause sans événement de visibilité) : ignorée.
+// Les retours d'onglet sont repérés par visibilitychange ; les images lentes mais
+// réelles (appareil très lent, saccades) doivent, elles, compter dans la mesure.
+const MAX_FRAME = 1;
 const SLOW_FPS = 45; // sous ce seuil (moyenne sur 2 s), on baisse d'un cran
 const FAST_FPS = 58; // au-dessus pendant FAST_DURATION, on remonte d'un cran
 const FAST_DURATION = 6;
@@ -59,6 +62,7 @@ export class Engine {
       sinceDrop: Infinity, // temps écoulé depuis la dernière baisse (s)
       cooldown: RAISE_COOLDOWN, // délai minimal entre une baisse et une remontée (s)
       sinceRaise: Infinity, // temps écoulé depuis la dernière remontée (s)
+      skip: false, // prochaine image à ignorer (retour d'onglet)
     };
     this.pointer = new THREE.Vector2();
     this.pointerSmooth = new THREE.Vector2();
@@ -68,6 +72,8 @@ export class Engine {
     this.onLayout = null;
 
     window.addEventListener('resize', () => this.resize());
+    // L'image qui suit un retour d'onglet couvre toute l'absence : à ne pas mesurer
+    document.addEventListener('visibilitychange', () => (this.frameStats.skip = true));
     window.addEventListener('pointermove', (event) => {
       this.pointer.set((event.clientX / innerWidth) * 2 - 1, (event.clientY / innerHeight) * 2 - 1);
     });
@@ -112,7 +118,8 @@ export class Engine {
     // Image anormalement longue (retour d'un onglet masqué, appli en pause…) :
     // elle ne dit rien des performances. On repart d'une mesure vierge après
     // une courte chauffe, sinon chaque aller-retour coûterait un cran de DPR.
-    if (dt > MAX_FRAME) {
+    if (stats.skip || dt > MAX_FRAME) {
+      stats.skip = false;
       stats.time = 0;
       stats.frames = 0;
       stats.fast = 0;

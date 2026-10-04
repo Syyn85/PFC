@@ -183,7 +183,12 @@
 
       <!-- Choix des atouts avant le match -->
       <section id="screen-draft" class="screen screen-draft" hidden aria-labelledby="draft-name">
-        <div class="draft-panel" role="dialog" aria-modal="true" aria-labelledby="draft-name">
+        <div
+          class="draft-panel"
+          role="dialog"
+          aria-labelledby="draft-name"
+          aria-describedby="draft-title draft-tags draft-count"
+        >
           <header class="draft-header">
             <button id="draft-back" class="icon-btn" type="button" aria-label="Retour">
               <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -290,7 +295,12 @@
 
       <!-- Fin de match -->
       <section id="screen-end" class="screen screen-end" hidden aria-labelledby="end-title">
-        <div class="end-card" role="dialog" aria-modal="true" aria-labelledby="end-title">
+        <div
+          class="end-card"
+          role="dialog"
+          aria-labelledby="end-title"
+          aria-describedby="end-sub end-bonus end-reward end-note end-hint"
+        >
           <h2 id="end-title" class="end-title">Victoire !</h2>
           <p id="end-sub" class="end-sub"></p>
           <dl id="end-stats" class="end-stats"></dl>

@@ -253,6 +253,17 @@ export class Effects {
     this.tweens.to(state, { opacity: 0 }, { duration: 0.4, delay: 1.0 });
   }
 
+  /**
+   * Affiche (ou rend à leur état normal) les réserves de particules, le temps
+   * d'une image d'amorçage : leurs shaders, ombre comprise, sont ainsi compilés
+   * au démarrage plutôt qu'à la première manche gagnée.
+   */
+  setPoolsVisible(visible) {
+    for (const pool of [this.sparks, this.confetti, this.coins]) {
+      pool.mesh.visible = visible || pool.alive > 0;
+    }
+  }
+
   /** Impact au moment de la révélation. */
   impact(position, { color = '#ffe25a', strength = 1 } = {}) {
     this.burst.position.copy(position);

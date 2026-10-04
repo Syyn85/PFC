@@ -52,7 +52,8 @@ export class Match {
     this.playerScore = 0;
     this.botScore = 0;
     this.streak = streak;
-    this.bestStreak = streak;
+    // La meilleure série ne compte que les manches gagnées dans CE match
+    this.bestStreak = 0;
     this.rounds = [];
     this.winner = null;
     this.boosts = { player: { ...playerBoosts }, bot: { ...botBoosts } };

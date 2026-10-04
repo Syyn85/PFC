@@ -66,8 +66,13 @@ function boot() {
   game.enterTitle();
   world.setTheme('crepuscule', 0);
 
-  // Compile les shaders avant la première image pour éviter les saccades.
+  // Compile les shaders (y compris ceux des effets, masqués au repos) et fait une
+  // image d'amorçage pour la passe d'ombre : pas de saccade à la première manche.
+  effects.setPoolsVisible(true);
+  engine.updateCamera(0, 0);
   engine.renderer.compile(engine.scene, engine.camera);
+  engine.render();
+  effects.setPoolsVisible(false);
 
   let last = performance.now();
   engine.renderer.setAnimationLoop((now) => {

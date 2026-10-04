@@ -339,8 +339,10 @@ export class Hud {
         const option = create('button', `draft-option draft-${kind}`);
         option.type = 'button';
         option.dataset.boost = kind;
+        const icon = create('span', 'boost-icon', kind === 'double' ? '×2' : '');
+        icon.setAttribute('aria-hidden', 'true');
         option.append(
-          create('span', 'boost-icon', kind === 'double' ? '×2' : ''),
+          icon,
           create('strong', 'draft-option-name', info.label),
           create('span', 'draft-option-text', info.text),
         );
@@ -350,14 +352,18 @@ export class Hud {
     );
     this.#renderDraft();
     el.draft.hidden = false;
-    (el.draftOptions.querySelector('[aria-pressed="true"]') ?? el.draftOptions.firstChild)?.focus({
-      preventScroll: true,
-    });
+    // Sélection reprise du match précédent : un seul appui sur Entrée pour relancer
+    const focusTarget =
+      this.draftSelection.length === size
+        ? el.draftGo
+        : (el.draftOptions.querySelector('[aria-pressed="true"]') ?? el.draftOptions.firstChild);
+    focusTarget?.focus({ preventScroll: true });
   }
 
   #toggleDraft(kind) {
     const selection = this.draftSelection;
     if (selection.includes(kind)) {
+      if (this.draftSize === 1) return;
       this.draftSelection = selection.filter((k) => k !== kind);
     } else if (this.draftSize === 1) {
       this.draftSelection = [kind];
@@ -486,11 +492,20 @@ export class Hud {
     for (const button of this.el.boosts) button.hidden = !kinds.includes(button.dataset.boost);
   }
 
-  /** state : { shield: {count, armed, available}, double: {…}, spy: {count, available} } */
+  /**
+   * state : { shield: {count, armed, available}, double: {…}, spy: {count, available} }
+   * Un atout consommé est désactivé ; un atout seulement bloqué pour cette manche
+   * (règle de non-cumul) reste cliquable pour que le jeu explique pourquoi.
+   */
   setBoosts(state) {
     for (const button of this.el.boosts) {
       const info = state[button.dataset.boost];
-      button.disabled = !info || info.count <= 0 || info.available === false;
+      const used = !info || info.count <= 0;
+      const blocked = !used && info.available === false;
+      button.disabled = used;
+      button.classList.toggle('is-blocked', blocked);
+      if (blocked) button.setAttribute('aria-disabled', 'true');
+      else button.removeAttribute('aria-disabled');
       if (button.hasAttribute('aria-pressed')) {
         button.setAttribute('aria-pressed', String(Boolean(info?.armed)));
       }
@@ -613,7 +628,6 @@ export class Hud {
     el.menu.textContent = menuLabel;
     el.end.hidden = false;
     (nextVisible ? el.next : el.again).focus({ preventScroll: true });
-    this.announce(`${title} ${sub}.${bonus ? ` ${bonus}.` : ''}${reward ? ` ${reward}.` : ''}`);
   }
 
   hideEnd() {

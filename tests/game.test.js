@@ -342,6 +342,55 @@ describe('campagne', () => {
   });
 });
 
+describe('stockage indisponible ou plein', () => {
+  const fullStorage = (initial = {}) => {
+    const data = new Map(Object.entries(initial));
+    return {
+      getItem: (key) => (data.has(key) ? data.get(key) : null),
+      setItem: () => {
+        throw new Error('QuotaExceededError');
+      },
+    };
+  };
+  const now = () => new Date(2026, 9, 3, 12);
+
+  it('le plafond quotidien tient sans stockage', () => {
+    const daily = new DailyRewards({ cap: 80, storage: null, now });
+    let total = 0;
+    for (let i = 0; i < 20; i++) total += daily.grant(12);
+    expect(total).toBe(80);
+    expect(daily.earnedToday).toBe(80);
+  });
+
+  it('le plafond quotidien tient quand le stockage est plein', () => {
+    const daily = new DailyRewards({ cap: 80, storage: fullStorage(), now });
+    let total = 0;
+    for (let i = 0; i < 20; i++) total += daily.grant(12);
+    expect(total).toBe(80);
+  });
+
+  it('le portefeuille ne perd aucun crédit quand le stockage est plein', () => {
+    const saved = JSON.stringify({ balance: 5, history: [] });
+    const wallet = new DemoWallet({ storage: fullStorage({ 'pfc:demo-wallet': saved }) });
+    for (let i = 0; i < 20; i++) wallet.credit(12, 'manche');
+    expect(wallet.balance).toBe(245);
+  });
+
+  it('le portefeuille fonctionne sans stockage', () => {
+    const wallet = new DemoWallet({ storage: null });
+    wallet.credit(10, 'a');
+    wallet.credit(5, 'b');
+    expect(wallet.balance).toBe(15);
+  });
+
+  it("la meilleure série d'un match perdu sans manche gagnée vaut 0", () => {
+    const match = new Match({ winsNeeded: 2, streak: 4 });
+    match.playRound('rock', 'paper');
+    match.playRound('rock', 'paper');
+    expect(match.bestStreak).toBe(0);
+  });
+});
+
 describe('fairness', () => {
   it('SHA-256 de secours conforme aux vecteurs de test', () => {
     const enc = new TextEncoder();

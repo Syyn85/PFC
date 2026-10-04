@@ -136,7 +136,11 @@ export class GameController {
     // Le chrono se met en pause quand l'onglet est caché (la boucle de rendu s'arrête aussi)
     document.addEventListener('visibilitychange', () => this.#onVisibilityChange());
     world.onLightning = () => this.sfx.thunder();
-    wallet.subscribe((w) => this.hud.setBalance(w.balance));
+    // Pendant la résolution d'une manche, le solde n'est affiché qu'avec la pluie de
+    // pièces (setBalance avec bump) pour ne pas dévoiler le résultat en avance.
+    wallet.subscribe((w) => {
+      if (this.state !== 'resolving') this.hud.setBalance(w.balance);
+    });
     hud.setFormats(CONFIG.game.formats);
     hud.setFormat(this.formatId);
     hud.setSound(!sfx.muted);
@@ -164,6 +168,7 @@ export class GameController {
     this.state = 'title';
     const { hud, tweens } = this;
     this.progress.reload();
+    hud.setBalance(this.wallet.balance);
     hud.showTitle(true, {
       progress:
         `${this.progress.clearedCount} / ${CAMPAIGN.length} îles libérées · ` +
@@ -217,8 +222,12 @@ export class GameController {
 
   /** Efface les traces du match précédent : ciel, poses, positions. */
   #resetStage() {
-    const { tweens } = this;
     this.world.setTheme('crepuscule');
+    this.#resetHands();
+  }
+
+  #resetHands() {
+    const { tweens } = this;
     this.player.setPose(tweens, 'relaxed', { duration: 0.5, easing: ease.outCubic });
     this.bot.setPose(tweens, 'relaxed', { duration: 0.5, easing: ease.outCubic });
     this.player.recover(tweens);
@@ -247,6 +256,7 @@ export class GameController {
     hud.hideRoundResult();
     hud.showHud(false);
     world.setTheme(def.theme);
+    this.#resetHands();
     tweens.to(this.titleBlend, { value: 0 }, { duration: 1.1, ease: ease.inOutCubic });
 
     if (this.botPaletteId !== def.id) {
@@ -265,9 +275,6 @@ export class GameController {
       size,
       preselected: this.lastDraft,
     });
-    hud.announce(
-      `${def.name}, ${def.title}. Choisis ${size > 1 ? `${size} atouts` : '1 atout'} pour ce match.`,
-    );
   }
 
   #opponentTags(def, winsNeeded) {
@@ -411,6 +418,7 @@ export class GameController {
       sfx.spy();
     } else if (this.armed === kind) {
       this.armed = null;
+      hud.announce(`${BOOST_LABELS[kind]} désarmé`);
       sfx.boost();
     } else {
       if (!match.canArm(kind)) {
@@ -557,13 +565,23 @@ export class GameController {
       boostSide: notes.side,
       reward,
     });
+    let line = null;
+    if (round.botPoints > 0 && !round.matchOver) line = this.#say('roundWin', { announce: false });
+    else if (round.playerPoints > 0 && !round.matchOver) {
+      line = this.#say('roundLose', { announce: false });
+    }
     hud.announce(
-      [title, sub, notes.text, `Score : ${round.playerScore} à ${round.botScore}`, reward]
+      [
+        title,
+        sub,
+        notes.text,
+        `Score : ${round.playerScore} à ${round.botScore}`,
+        reward,
+        line && `${def.name} : ${line}`,
+      ]
         .filter(Boolean)
         .join('. '),
     );
-    if (round.botPoints > 0 && !round.matchOver) this.#say('roundWin');
-    else if (round.playerPoints > 0 && !round.matchOver) this.#say('roundLose');
 
     if (granted > 0) {
       effects.coinShower(playerFront, Math.min(6 + granted, 24));
@@ -683,11 +701,17 @@ export class GameController {
 
   // --- Boucle -------------------------------------------------------------------
 
-  #say(event) {
+  /**
+   * Fait parler l'adversaire (bulle). La réplique est aussi lue par les lecteurs
+   * d'écran, sauf si l'appelant l'intègre à sa propre annonce. Retourne la réplique.
+   */
+  #say(event, { announce = true } = {}) {
     const line = pickLine(this.def, event);
-    if (!line) return;
+    if (!line) return null;
     this.hud.showBubble(this.def.name, line);
+    if (announce) this.hud.announce(`${this.def.name} : ${line}`);
     this.bubbleTime = 2.6;
+    return line;
   }
 
   update(dt, time) {

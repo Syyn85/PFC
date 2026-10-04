@@ -61,18 +61,23 @@ export class DailyRewards {
     this.storage = storage;
     this.key = key;
     this.now = now;
+    // Plancher en mémoire : le plafond doit tenir même si le stockage est
+    // indisponible, plein ou corrompu pendant la session.
+    this.memory = { day: null, earned: 0 };
   }
 
   /**
    * État du jour, relu à chaque accès : la sauvegarde peut avoir été modifiée
-   * par un autre onglet, ou être corrompue (on repart alors de zéro).
+   * par un autre onglet. On retient le plus grand des deux montants (sauvegarde
+   * valide du jour, mémoire de la session).
    */
   #load() {
     const today = dayKey(this.now());
     const saved = readJSON(this.key, null, this.storage);
     const valid =
       saved && saved.day === today && Number.isFinite(saved.earned) && saved.earned >= 0;
-    return valid ? { day: today, earned: saved.earned } : { day: today, earned: 0 };
+    const remembered = this.memory.day === today ? this.memory.earned : 0;
+    return { day: today, earned: Math.max(valid ? saved.earned : 0, remembered) };
   }
 
   get earnedToday() {
@@ -89,6 +94,7 @@ export class DailyRewards {
     const granted = Math.max(0, Math.min(amount, this.cap - state.earned));
     if (granted > 0) {
       state.earned += granted;
+      this.memory = { ...state };
       writeJSON(this.key, state, this.storage);
     }
     return granted;

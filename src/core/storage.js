@@ -29,10 +29,13 @@ export function readJSON(key, fallback, storage = safeStorage()) {
   }
 }
 
+/** Écrit une valeur ; retourne false si le stockage est absent, plein ou bloqué. */
 export function writeJSON(key, value, storage = safeStorage()) {
   try {
-    storage?.setItem(key, JSON.stringify(value));
+    if (!storage) return false;
+    storage.setItem(key, JSON.stringify(value));
+    return true;
   } catch {
-    /* stockage plein ou bloqué : la valeur reste en mémoire */
+    return false; // stockage plein ou bloqué : l'appelant garde la valeur en mémoire
   }
 }

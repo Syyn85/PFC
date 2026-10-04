@@ -1081,6 +1081,12 @@ kbd {
   box-shadow: 0 1px 0 var(--ink);
 }
 
+/* Bloqué pour cette manche (non-cumul), mais pas consommé : pas de rature */
+.boost.is-blocked {
+  opacity: 0.55;
+  box-shadow: 0 1px 0 var(--ink);
+}
+
 .boost:disabled .boost-label {
   text-decoration: line-through 2px;
 }
@@ -1856,6 +1862,19 @@ kbd {
   .screen-title .logo {
     font-size: var(--step-3);
   }
+}
+
+/* Contraste forcé : la sélection ne repose plus sur la couleur */
+@media (forced-colors: active) {
+  .draft-option[aria-pressed='true'],
+  .boost[aria-pressed='true'] {
+    outline: 3px solid Highlight;
+    outline-offset: 2px;
+  }
+}
+
+.draft-option[aria-pressed='true'] .draft-option-name::after {
+  content: ' ✓';
 }
 
 @media (pointer: coarse) {

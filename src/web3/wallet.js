@@ -78,8 +78,11 @@ export class DemoWallet {
 
   #load() {
     const saved = readJSON(this.storageKey, null, this.storage);
-    if (saved && Number.isFinite(saved.balance) && Array.isArray(saved.history)) return saved;
-    // Stockage indisponible : on garde l'état en mémoire plutôt que de le perdre
+    const valid = saved && Number.isFinite(saved.balance) && Array.isArray(saved.history);
+    // Le solde de démo ne fait que croître : une sauvegarde plus basse que la
+    // mémoire signifie qu'une écriture a échoué (stockage plein), on garde la mémoire.
+    if (valid && !(this.#state && saved.balance < this.#state.balance)) return saved;
+    // Stockage indisponible ou en retard : on garde l'état en mémoire plutôt que de le perdre
     return this.#state ?? { balance: 0, history: [] };
   }
 }

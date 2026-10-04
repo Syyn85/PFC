@@ -23,6 +23,7 @@ export class Hud {
       title: $('#screen-title'),
       campaign: $('#campaign-btn'),
       campaignProgress: $('#campaign-progress'),
+      vsMark: $('#vs-mark'),
       play: $('#play-btn'),
       formatPicker: $('#format-picker'),
       formats: [],
@@ -589,6 +590,8 @@ export class Hud {
   showChoices(visible) {
     this.choosing = visible;
     this.el.choices.hidden = !visible;
+    // Le VS décoratif n'est là que pendant le choix : il ne masque pas la révélation
+    this.el.vsMark.hidden = !visible;
     // Au clavier, le focus doit rester utilisable d'une manche à l'autre
     if (visible && this.keyboardUser) this.el.cards[0].focus({ preventScroll: true });
   }

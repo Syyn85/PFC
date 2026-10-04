@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#2a1f63" />
+    <meta name="theme-color" content="#0b1a2e" />
     <title>PFC Arena</title>
     <meta
       name="description"
@@ -15,6 +15,66 @@
     />
   </head>
   <body>
+    <!-- Icônes vectorielles de l'interface (gestes, menu) -->
+    <svg width="0" height="0" style="position: absolute" aria-hidden="true" focusable="false">
+      <defs>
+        <symbol id="g-rock" viewBox="0 0 24 24">
+          <path
+            d="M4.5 15l2-6.5 5.5-3.6 5.6 2.1 2.4 5.9-2 4.6-6 2.1-6.4-1.6z"
+            fill="#c9ccd6"
+            stroke="#0b1a2e"
+            stroke-width="1.6"
+            stroke-linejoin="round"
+          />
+          <path d="M8.5 9.5l3.8-2.4 4 1.5-2.6 2.6z" fill="#f2f3f7" />
+        </symbol>
+        <symbol id="g-paper" viewBox="0 0 24 24">
+          <path
+            d="M4.5 20C4 10.5 10 4.5 20 4c.5 10-5.8 16.4-15.5 16z"
+            fill="#58c96f"
+            stroke="#0b1a2e"
+            stroke-width="1.6"
+            stroke-linejoin="round"
+          />
+          <path d="M6.5 18L16.5 8" stroke="#1d6a35" stroke-width="1.6" stroke-linecap="round" />
+        </symbol>
+        <symbol id="g-scissors" viewBox="0 0 24 24">
+          <g stroke="#0b1a2e" stroke-width="1.5" stroke-linejoin="round">
+            <path d="M10.5 13.5L18 3.5l1.6 1-6.2 10.3z" fill="#eef1f7" />
+            <path d="M13.5 13.5L6 3.5l-1.6 1 6.2 10.3z" fill="#cfd5e3" />
+            <circle cx="7.5" cy="18" r="3.2" fill="none" stroke="#f15d65" stroke-width="2.4" />
+            <circle cx="16.5" cy="18" r="3.2" fill="none" stroke="#f15d65" stroke-width="2.4" />
+          </g>
+        </symbol>
+        <symbol id="g-swords" viewBox="0 0 24 24">
+          <path
+            d="M4 4l10 10M20 4L10 14M6.5 14.5l3 3M17.5 14.5l-3 3M4 20l3-3M20 20l-3-3"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.4"
+            stroke-linecap="round"
+          />
+        </symbol>
+        <symbol id="g-bolt" viewBox="0 0 24 24">
+          <path
+            d="M13.5 2.5L5 13.5h6l-1 8 8.5-11h-6z"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.2"
+            stroke-linejoin="round"
+          />
+        </symbol>
+        <symbol id="g-bag" viewBox="0 0 24 24">
+          <path
+            d="M4.5 8.5h15l-1.3 12H5.8zM8.5 8.5V7a3.5 3.5 0 017 0v1.5"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.2"
+            stroke-linejoin="round"
+          />
+        </symbol>
+      </defs>
+    </svg>
     <div id="app">
       <canvas id="scene" aria-hidden="true"></canvas>
       <div class="vignette" aria-hidden="true"></div>
@@ -80,34 +140,49 @@
       <!-- Écran titre -->
       <section id="screen-title" class="screen screen-title" aria-labelledby="game-title">
         <div class="title-top">
-          <h1 id="game-title" class="logo">
-            <span class="logo-word w-rock">Pierre</span>
-            <span class="logo-word w-paper">Feuille</span>
-            <span class="logo-word w-scissors">Ciseaux</span>
+          <h1 id="game-title" class="logo" aria-label="PFC Arena">
+            <span class="logo-gestures" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><use href="#g-rock" /></svg>
+              <svg viewBox="0 0 24 24"><use href="#g-paper" /></svg>
+              <svg viewBox="0 0 24 24"><use href="#g-scissors" /></svg>
+            </span>
+            <span class="logo-word logo-pfc" aria-hidden="true">PFC</span>
+            <span class="logo-word logo-arena" aria-hidden="true">ARENA</span>
           </h1>
-          <p class="tagline">Duel au sommet de l'arène céleste</p>
+          <p class="tagline">Pierre · Feuille · Ciseaux</p>
         </div>
-        <div class="title-bottom">
-          <button id="campaign-btn" class="btn btn-primary btn-xl" type="button">
-            Le tour des îles
+        <nav class="title-bottom" aria-label="Menu principal">
+          <button id="campaign-btn" class="btn btn-primary btn-xl btn-play" type="button">
+            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <use href="#g-swords" />
+            </svg>
+            <span class="btn-play-text">Jouer<small>Le tour des îles</small></span>
           </button>
           <p id="campaign-progress" class="campaign-progress"></p>
           <div class="quick-play">
+            <button id="play-btn" class="btn btn-ghost btn-menu" type="button">
+              <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <use href="#g-bolt" />
+              </svg>
+              Partie rapide
+            </button>
             <div
               id="format-picker"
               class="format-picker"
               role="radiogroup"
               aria-label="Format de la partie rapide"
             ></div>
-            <button id="play-btn" class="btn btn-ghost" type="button">Partie rapide</button>
-            <button id="shop-btn" class="btn btn-ghost" type="button">Boutique</button>
           </div>
-          <p class="hint">
-            Clavier : <kbd>1</kbd> ou <kbd>P</kbd> Pierre · <kbd>2</kbd> ou <kbd>F</kbd> Feuille ·
-            <kbd>3</kbd> ou <kbd>C</kbd> Ciseaux · <kbd>B</kbd> Bouclier · <kbd>D</kbd> Double ·
-            <kbd>E</kbd> Espion
-          </p>
-        </div>
+          <button id="shop-btn" class="btn btn-ghost btn-menu" type="button">
+            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#g-bag" /></svg>
+            Boutique
+          </button>
+        </nav>
+        <p class="hint">
+          Clavier : <kbd>1</kbd> ou <kbd>P</kbd> Pierre · <kbd>2</kbd> ou <kbd>F</kbd> Feuille ·
+          <kbd>3</kbd> ou <kbd>C</kbd> Ciseaux · <kbd>B</kbd> Bouclier · <kbd>D</kbd> Double ·
+          <kbd>E</kbd> Espion
+        </p>
       </section>
 
       <!-- Boutique de gants -->
@@ -249,6 +324,9 @@
 
       <div id="callout" class="callout" aria-hidden="true"></div>
 
+      <!-- Petit VS entre les deux mains, pendant le choix du coup -->
+      <div id="vs-mark" class="vs-mark" hidden aria-hidden="true">VS</div>
+
       <section id="versus" class="versus" hidden>
         <p id="versus-island" class="versus-island"></p>
         <p id="versus-name" class="versus-name"></p>
@@ -330,6 +408,16 @@
           aria-labelledby="end-title"
           aria-describedby="end-sub end-bonus end-reward end-note end-hint"
         >
+          <svg class="end-crown" viewBox="0 0 48 48" aria-hidden="true">
+            <path
+              d="M5 17l10 8 9-14 9 14 10-8-4 21H9z"
+              fill="#ffd34d"
+              stroke="#0b1a2e"
+              stroke-width="2.6"
+              stroke-linejoin="round"
+            />
+            <circle cx="24" cy="29" r="3.4" fill="#f15d65" stroke="#0b1a2e" stroke-width="1.6" />
+          </svg>
           <h2 id="end-title" class="end-title">Victoire !</h2>
           <p id="end-sub" class="end-sub"></p>
           <dl id="end-stats" class="end-stats"></dl>

@@ -5,23 +5,29 @@ import { THEMES } from './themes.js';
 import { RAMPS, canvasTexture, toonMaterial, toonMesh } from './toon.js';
 import { bakeStatic } from './bake.js';
 import {
+  createBush,
   createCloud,
   createCoin,
-  createCrystalCluster,
+  createGate,
   createIslet,
-  createLantern,
+  createPalm,
   createRock,
-  createTorii,
+  createRuinWall,
+  createSpire,
+  createTorch,
+  createTower,
   createTree,
 } from './props.js';
 
 /**
- * Le monde : une arène de pierre posée sur une île flottante au-dessus d'une
- * mer de nuages. Tout est procédural (aucun asset externe) ; l'ambiance
+ * Le monde : une arène de pierre entourée de ruines, posée sur une île flottante
+ * au-dessus de la mer. Tout est procédural (aucun asset externe) ; l'ambiance
  * (ciel, lumières, brouillard) change selon l'île via setTheme().
  */
 
-const OUTLINE = { color: '#231a3d', thickness: 2.2 };
+const OUTLINE = { color: '#14213a', thickness: 2.2 };
+const HIGHLIGHT_WARM = new THREE.Color('#ffd27a');
+const HIGHLIGHT_COLD = new THREE.Color('#b9c8ff');
 export const ARENA_RADIUS = 4.3;
 
 export function createWorld(scene) {
@@ -30,7 +36,8 @@ export function createWorld(scene) {
   // --- Lumières (couleurs fixées par le thème) ---
   const sunDirection = new THREE.Vector3(-0.55, 0.16, -1);
   scene.background = new THREE.Color();
-  scene.fog = new THREE.Fog(new THREE.Color(), 38, 140);
+  // Brouillard assez proche : les ruines et les îles lointaines s'estompent derrière les mains
+  scene.fog = new THREE.Fog(new THREE.Color(), 16, 120);
 
   const hemi = new THREE.HemisphereLight('#d9ccff', '#7a4a86', 1.15);
   scene.add(hemi);
@@ -61,75 +68,87 @@ export function createWorld(scene) {
   island.add(createIslandBody(rand));
   island.add(createArena());
 
-  // Torii derrière l'arène
-  const torii = createTorii();
-  torii.position.set(0, -0.8, -6.2);
-  island.add(torii);
+  // Ruines derrière l'arène : murs, porte centrale et deux tours à bannières.
+  // Elles restent en arrière-plan (moins contrastées que les mains, voir brouillard).
+  for (const [x, z, rot, w, h] of [
+    [-3.9, -7.0, 0.32, 3.2, 2.3],
+    [3.9, -7.0, -0.32, 3.2, 2.0],
+    [-7.3, -3.9, 1.1, 2.6, 1.6],
+    [7.3, -3.7, -1.1, 2.6, 2.2],
+  ]) {
+    const wall = createRuinWall(rand, { width: w, height: h });
+    wall.position.set(x, -0.82, z);
+    wall.rotation.y = rot;
+    island.add(wall);
+  }
+  const gate = createGate(rand);
+  gate.position.set(0, -0.82, -8.4);
+  island.add(gate);
+  for (const [x, z, h, banner] of [
+    [-6.2, -6.3, 4.6, '#2f86e8'],
+    [6.4, -6.0, 5.2, '#e9505c'],
+  ]) {
+    const tower = createTower(rand, { height: h, banner });
+    tower.position.set(x, -0.82, z);
+    island.add(tower);
+  }
 
-  // Lanternes autour de l'arène
+  // Torches de part et d'autre de l'arène (scintillement : voir update)
   const lanterns = [];
   for (const [x, z] of [
-    [-5.4, 1.4],
-    [5.4, 1.4],
-    [-4.9, -3.4],
-    [4.9, -3.4],
+    [-5.3, -1.6],
+    [5.3, -1.6],
   ]) {
-    const lantern = createLantern();
-    lantern.position.set(x, -0.8, z);
-    lantern.rotation.y = rand() * 0.6;
-    island.add(lantern);
-    lanterns.push(lantern);
+    const torch = createTorch();
+    torch.position.set(x, -0.8, z);
+    island.add(torch);
+    lanterns.push(torch);
   }
 
-  // Arbres en fleurs
-  for (const [x, z, s] of [
-    [-6.6, -2.2, 1.05],
-    [-5.0, -5.9, 1.25],
-    [-7.6, 1.6, 0.9],
-    [6.4, -2.6, 1.1],
-    [4.6, -6.3, 1.3],
-    [7.6, 1.0, 0.85],
-    [-2.6, -8.3, 1.1],
-    [2.4, -8.6, 1.0],
-    [-8.4, -4.6, 0.95],
-    [8.3, -5.1, 1.0],
+  // Végétation regroupée en bosquets (palmiers, arbres, buissons)
+  for (const [x, z, s, kind] of [
+    [-6.8, -2.6, 1.15, 'palm'],
+    [-7.9, 0.6, 0.95, 'bush'],
+    [-5.0, -5.0, 1.0, 'tree'],
+    [6.9, -2.4, 1.2, 'palm'],
+    [7.9, 0.4, 0.9, 'bush'],
+    [5.0, -5.2, 0.95, 'tree'],
+    [-2.6, -9.0, 1.1, 'palm'],
+    [2.8, -9.1, 1.0, 'palm'],
+    [-8.6, -4.8, 1.0, 'palm'],
+    [8.6, -5.0, 1.05, 'tree'],
   ]) {
-    const tree = createTree(rand, { scale: s });
-    tree.position.set(x, -0.82, z);
-    island.add(tree);
+    const plant =
+      kind === 'palm'
+        ? createPalm(rand, { scale: s })
+        : kind === 'bush'
+          ? createBush(rand, { scale: s })
+          : createTree(rand, { scale: s });
+    plant.position.set(x, -0.82, z);
+    island.add(plant);
   }
 
-  // Rochers et cristaux
-  for (let i = 0; i < 14; i++) {
+  // Rochers
+  for (let i = 0; i < 12; i++) {
     const a = rand() * Math.PI * 2;
     const r = 5.2 + rand() * 3.4;
     const rock = createRock(rand, { size: 0.25 + rand() * 0.35 });
     rock.position.set(Math.cos(a) * r, -0.75, Math.sin(a) * r * 0.9);
     island.add(rock);
   }
-  for (const [x, z, color] of [
-    [-7.6, -3.0, '#5ff2e0'],
-    [7.2, -3.8, '#ffd45f'],
-    [-3.9, -6.9, '#ffd45f'],
-    [3.6, -7.2, '#5ff2e0'],
-  ]) {
-    const crystals = createCrystalCluster(rand, { color });
-    crystals.position.set(x, -0.8, z);
-    island.add(crystals);
-  }
 
   bakeStatic(island);
 
-  // --- Pièces du token en orbite ---
+  // --- Pièces du token en orbite (hautes et peu nombreuses : elles ne masquent rien) ---
   const coins = [];
-  for (let i = 0; i < 7; i++) {
-    const coin = createCoin({ radius: 0.42, thickness: 0.11 });
+  for (let i = 0; i < 4; i++) {
+    const coin = createCoin({ radius: 0.34, thickness: 0.09 });
     coin.userData.orbit = {
-      angle: (i / 7) * Math.PI * 2,
-      speed: 0.12,
-      rx: 7.2,
-      rz: 5.2,
-      y: 4.2 + Math.sin(i * 1.7) * 0.5,
+      angle: (i / 4) * Math.PI * 2,
+      speed: 0.1,
+      rx: 8.6,
+      rz: 6.2,
+      y: 5.4 + Math.sin(i * 1.7) * 0.5,
       spin: 1.2 + rand(),
     };
     scene.add(coin);
@@ -139,7 +158,9 @@ export function createWorld(scene) {
   // --- Décor lointain : îlots et nuages ---
   const islets = [];
   for (let i = 0; i < 9; i++) {
-    const a = Math.PI * (0.95 + (i / 8) * 1.1) + (rand() - 0.5) * 0.2; // derrière et sur les côtés
+    let a = Math.PI * (0.95 + (i / 8) * 1.1) + (rand() - 0.5) * 0.2; // derrière et sur les côtés
+    // Jamais pile derrière l'arène : cette zone reste dégagée entre les deux mains
+    if (Math.abs(a - Math.PI * 1.5) < 0.3) a += a < Math.PI * 1.5 ? -0.35 : 0.35;
     const r = 15 + rand() * 12;
     const islet = createIslet(rand, { radius: 0.8 + rand() * 1.1 });
     islet.position.set(Math.cos(a) * r, -1.5 + rand() * 5, Math.sin(a) * r);
@@ -149,6 +170,21 @@ export function createWorld(scene) {
     islets.push(islet);
   }
 
+  // Pitons rocheux lointains : profondeur et silhouettes, comme des îles à l'horizon
+  for (const [a, r, h, rad] of [
+    [1.05, 30, 16, 2.6],
+    [1.22, 38, 22, 3.2],
+    [1.38, 27, 12, 2.0],
+    [1.62, 36, 19, 2.8],
+    [1.78, 29, 14, 2.3],
+    [1.93, 40, 24, 3.4],
+  ]) {
+    const spire = createSpire(rand, { height: h, radius: rad });
+    spire.position.set(Math.cos(Math.PI * a) * r, -6 + h * 0.35, Math.sin(Math.PI * a) * r);
+    bakeStatic(spire, { castShadow: false });
+    scene.add(spire);
+  }
+
   const clouds = [];
   for (let i = 0; i < 14; i++) {
     const a = Math.PI * (0.9 + rand() * 1.2);
@@ -156,7 +192,7 @@ export function createWorld(scene) {
     const low = i < 5;
     const cloud = createCloud(rand, {
       scale: low ? 1.8 + rand() * 1.2 : 1.1 + rand() * 1.4,
-      color: low ? '#ffd9e2' : '#fff2f6',
+      color: low ? '#f4fbff' : '#ffffff',
     });
     cloud.position.set(Math.cos(a) * r, low ? -6 - rand() * 2 : 1 + rand() * 9, Math.sin(a) * r);
     cloud.userData.drift = 0.15 + rand() * 0.25;
@@ -165,8 +201,8 @@ export function createWorld(scene) {
     clouds.push(cloud);
   }
 
-  // --- Particules : pétales et lucioles ---
-  const petals = createPetals(rand, 140);
+  // --- Particules : feuilles portées par le vent et lucioles ---
+  const petals = createPetals(rand, 60);
   scene.add(petals.mesh);
   const fireflies = createFireflies(rand, 70);
   scene.add(fireflies.points);
@@ -183,7 +219,18 @@ export function createWorld(scene) {
   const lightning = { enabled: false, timer: 4, flash: 0, second: 0 };
   // Mouvement réduit : éclairs gardés (son, rythme) mais flash lumineux très atténué.
   const flashScale = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 0.15 : 1;
-  const world = { update, setTheme, onLightning: null, key, hemi, sunDirection, coins };
+  // Mise en valeur de fin de match : > 0 lumière dorée, < 0 lumière plus froide
+  let highlight = 0;
+  const world = {
+    update,
+    setTheme,
+    setHighlight: (value) => (highlight = value),
+    onLightning: null,
+    key,
+    hemi,
+    sunDirection,
+    coins,
+  };
 
   function applyAmbience(state) {
     const { sky: k, sea: w } = uniforms;
@@ -256,6 +303,15 @@ export function createWorld(scene) {
     const flash = lightning.flash * flashScale;
     uniforms.sky.uFlash.value = flash;
     hemi.intensity = current.hemiIntensity + flash * 1.6;
+    key.color.copy(current.keyColor);
+    key.intensity = current.keyIntensity;
+    if (highlight > 0) {
+      key.color.lerp(HIGHLIGHT_WARM, 0.55 * highlight);
+      key.intensity *= 1 + 0.18 * highlight;
+    } else if (highlight < 0) {
+      key.color.lerp(HIGHLIGHT_COLD, -0.5 * highlight);
+      key.intensity *= 1 + 0.15 * highlight;
+    }
 
     for (const coin of coins) {
       const o = coin.userData.orbit;
@@ -365,7 +421,7 @@ function createIslandBody(rand) {
   const rockGeo = new THREE.CylinderGeometry(9.0, 1.2, 7.5, 18, 7);
   const rp = rockGeo.attributes.position;
   const colors = [];
-  const strata = ['#c99a86', '#b17f80', '#956a85', '#7b5884', '#664a7c'].map(
+  const strata = ['#c9b49a', '#b39d84', '#9a8670', '#82725f', '#6a5d50'].map(
     (c) => new THREE.Color(c),
   );
   const jitter = new Map();
@@ -399,7 +455,7 @@ function createIslandBody(rand) {
 
   // Rochers suspendus sous l'île
   for (let i = 0; i < 6; i++) {
-    const hanging = createRock(rand, { size: 0.6 + rand() * 0.6, color: '#8a6489' });
+    const hanging = createRock(rand, { size: 0.6 + rand() * 0.6, color: '#7f7263' });
     hanging.castShadow = false;
     const a = rand() * Math.PI * 2;
     hanging.position.set(Math.cos(a) * 3.2, -8.6 - rand() * 1.2, Math.sin(a) * 3.2);
@@ -413,24 +469,31 @@ function createIslandBody(rand) {
 function drawArenaFloor(ctx, size) {
   const c = size / 2;
   const R = size / 2;
-  ctx.fillStyle = '#f4e6d4';
+  const rand = seededRandom(77);
+  ctx.fillStyle = '#9d978e';
   ctx.fillRect(0, 0, size, size);
 
-  // Demi-terrains aux couleurs des équipes
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(c, c, R * 0.98, 0, Math.PI * 2);
-  ctx.clip();
-  ctx.fillStyle = 'rgba(67, 209, 255, 0.22)';
-  ctx.fillRect(0, 0, c, size);
-  ctx.fillStyle = 'rgba(255, 79, 123, 0.2)';
-  ctx.fillRect(c, 0, c, size);
-  ctx.restore();
-
-  // Dallage concentrique
+  // Dallage concentrique : chaque dalle a sa teinte de pierre
   const rings = [0.98, 0.84, 0.68, 0.5, 0.3];
-  ctx.strokeStyle = 'rgba(80, 52, 110, 0.32)';
-  ctx.lineWidth = size * 0.004;
+  const shades = ['#c3bdb2', '#b7b1a6', '#aca69a', '#bfb8ab', '#a6a094'];
+  for (let i = 0; i < rings.length; i++) {
+    const outer = rings[i] * R;
+    const inner = (rings[i + 1] ?? 0.22) * R;
+    const tiles = Math.round(10 + rings[i] * 26);
+    for (let t = 0; t < tiles; t++) {
+      const a0 = (t / tiles) * Math.PI * 2 + i * 0.3;
+      const a1 = ((t + 1) / tiles) * Math.PI * 2 + i * 0.3;
+      ctx.beginPath();
+      ctx.arc(c, c, outer, a0, a1);
+      ctx.arc(c, c, inner, a1, a0, true);
+      ctx.closePath();
+      ctx.fillStyle = shades[Math.floor(rand() * shades.length)];
+      ctx.fill();
+    }
+  }
+  // Joints sombres entre les dalles
+  ctx.strokeStyle = 'rgba(40, 44, 56, 0.55)';
+  ctx.lineWidth = size * 0.005;
   for (let i = 0; i < rings.length; i++) {
     const outer = rings[i] * R;
     const inner = (rings[i + 1] ?? 0.22) * R;
@@ -447,26 +510,16 @@ function drawArenaFloor(ctx, size) {
     }
   }
 
-  // Ligne médiane
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
-  ctx.lineWidth = size * 0.012;
-  ctx.setLineDash([size * 0.03, size * 0.02]);
-  ctx.beginPath();
-  ctx.moveTo(c, c - R * 0.98);
-  ctx.lineTo(c, c + R * 0.98);
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  // Bordure décorative
-  ctx.strokeStyle = '#e8a93a';
-  ctx.lineWidth = size * 0.018;
+  // Bordure dorée
+  ctx.strokeStyle = '#e8b23a';
+  ctx.lineWidth = size * 0.014;
   ctx.beginPath();
   ctx.arc(c, c, R * 0.93, 0, Math.PI * 2);
   ctx.stroke();
 
   // Emblème central : le cycle pierre → ciseaux → feuille
   const er = R * 0.22;
-  ctx.fillStyle = '#2f2350';
+  ctx.fillStyle = '#152b45';
   ctx.beginPath();
   ctx.arc(c, c, er, 0, Math.PI * 2);
   ctx.fill();
@@ -501,8 +554,8 @@ function drawArenaFloor(ctx, size) {
 
 function createArena() {
   const g = new THREE.Group();
-  const stone = toonMaterial({ color: '#e9d8c6', ramp: RAMPS.soft, rim: 0.25 });
-  const stoneDark = toonMaterial({ color: '#b9a0c4', ramp: RAMPS.soft, rim: 0.2 });
+  const stone = toonMaterial({ color: '#bdb6aa', ramp: RAMPS.soft, rim: 0.25 });
+  const stoneDark = toonMaterial({ color: '#8a8378', ramp: RAMPS.soft, rim: 0.2 });
   const gold = toonMaterial({
     color: '#ffc94a',
     ramp: RAMPS.soft,
@@ -547,7 +600,7 @@ function createArena() {
 
   // Liseré doré
   const trim = toonMesh(new THREE.TorusGeometry(ARENA_RADIUS - 0.04, 0.07, 10, 96), gold, {
-    outline: { color: '#231a3d', thickness: 1.4 },
+    outline: { color: '#14213a', thickness: 1.4 },
   });
   trim.rotation.x = Math.PI / 2;
   trim.position.y = 0.02;
@@ -557,7 +610,7 @@ function createArena() {
   for (let i = 0; i < 12; i++) {
     const a = (i / 12) * Math.PI * 2 + Math.PI / 12;
     const stud = toonMesh(new THREE.SphereGeometry(0.11, 14, 10), gold, {
-      outline: { color: '#231a3d', thickness: 1.4 },
+      outline: { color: '#14213a', thickness: 1.4 },
     });
     stud.position.set(
       Math.cos(a) * (ARENA_RADIUS + 0.07),
@@ -582,7 +635,7 @@ function createPetals(rand, count) {
   });
   const mesh = new THREE.InstancedMesh(geo, material, count);
   mesh.frustumCulled = false;
-  const palette = ['#ffb3d1', '#ff9cc8', '#ffd1e3', '#fff0f6'].map((c) => new THREE.Color(c));
+  const palette = ['#8fd66a', '#b8ec84', '#6fbf52', '#f6f2c8'].map((c) => new THREE.Color(c));
   const items = [];
   for (let i = 0; i < count; i++) {
     items.push({

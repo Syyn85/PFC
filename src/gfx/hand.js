@@ -12,19 +12,24 @@ import { ease } from '../core/tween.js';
  * les doigts se replient vers -Z (paume), le pouce est du côté +Y.
  */
 
-const PALM = { w: 0.78, h: 0.84, d: 0.46, r: 0.21 };
+const PALM = { w: 0.8, h: 0.86, d: 0.5, r: 0.23 };
 const PALM_FRONT = PALM.w / 2 - 0.07;
 const ARM_LENGTH = 3.6;
 
+// Doigts épais de gant cartoon : rayons généreux, phalanges courtes qui se chevauchent
 const FINGERS = [
-  { name: 'index', y: 0.27, radius: 0.112, lengths: [0.28, 0.21, 0.17] },
-  { name: 'middle', y: 0.09, radius: 0.116, lengths: [0.31, 0.23, 0.18] },
-  { name: 'ring', y: -0.09, radius: 0.11, lengths: [0.28, 0.21, 0.17] },
-  { name: 'pinky', y: -0.265, radius: 0.098, lengths: [0.22, 0.17, 0.14] },
+  { name: 'index', y: 0.275, radius: 0.124, lengths: [0.27, 0.2, 0.16] },
+  { name: 'middle', y: 0.09, radius: 0.128, lengths: [0.3, 0.22, 0.17] },
+  { name: 'ring', y: -0.095, radius: 0.122, lengths: [0.27, 0.2, 0.16] },
+  { name: 'pinky', y: -0.27, radius: 0.108, lengths: [0.21, 0.16, 0.13] },
 ];
-const THUMB = { radius: 0.122, lengths: [0.25, 0.2], position: [-0.06, PALM.h / 2 - 0.1, 0.02] };
+const THUMB = { radius: 0.135, lengths: [0.25, 0.2], position: [-0.06, PALM.h / 2 - 0.1, 0.02] };
+// Manchette (bracelet du gant) : bande épaisse autour du poignet, axe X
+const BAND = { x: -0.04, half: 0.29, radius: 0.47 };
 
 // [écartement, phalange 1, phalange 2, phalange 3] ; pouce : [écartement, rotation, flexion]
+// roll : rotation de la main autour de l'avant-bras. Le poing se montre de profil (pouce
+// replié visible), la feuille à plat (dos et doigts écartés), les ciseaux de trois quarts.
 const CURLED = [1.45, 1.62, 1.15];
 export const POSES = {
   relaxed: {
@@ -33,13 +38,15 @@ export const POSES = {
     ring: [-0.04, 0.44, 0.52, 0.34],
     pinky: [-0.1, 0.5, 0.58, 0.38],
     thumb: [0.6, 0.28, 0.25],
+    roll: [0.25],
   },
   rock: {
     index: [0.02, ...CURLED],
     middle: [0, ...CURLED],
     ring: [-0.02, ...CURLED],
     pinky: [-0.04, 1.42, 1.58, 1.1],
-    thumb: [0.05, 0.42, 0.42],
+    thumb: [0.12, 0.95, 0.75],
+    roll: [1.05],
   },
   paper: {
     index: [0.17, 0.04, 0.05, 0.03],
@@ -47,6 +54,7 @@ export const POSES = {
     ring: [-0.07, 0.04, 0.05, 0.03],
     pinky: [-0.21, 0.07, 0.08, 0.05],
     thumb: [0.98, 0.06, 0.1],
+    roll: [0],
   },
   scissors: {
     index: [0.26, 0.02, 0.03, 0.02],
@@ -54,6 +62,7 @@ export const POSES = {
     ring: [-0.02, ...CURLED],
     pinky: [-0.04, 1.42, 1.58, 1.1],
     thumb: [-0.22, 1.0, 0.55],
+    roll: [0.35],
   },
   // Poses de portrait (carte des îles)
   point: {
@@ -62,6 +71,7 @@ export const POSES = {
     ring: [-0.02, ...CURLED],
     pinky: [-0.04, 1.42, 1.58, 1.1],
     thumb: [-0.22, 1.0, 0.55],
+    roll: [0.2],
   },
   fox: {
     index: [0.22, 0.05, 0.1, 0.05],
@@ -69,31 +79,35 @@ export const POSES = {
     ring: [-0.02, 1.15, 0.65, 0.2],
     pinky: [-0.26, 0.05, 0.1, 0.05],
     thumb: [-0.35, 0.9, 0.2],
+    roll: [0],
   },
 };
 
+// cuff : manchette ; cuffLip : bandes et pastille de l'emblème ; accent : emblème ;
+// sleeve / sleeveDark : anciennes manches, gardés pour les palettes existantes (boutique,
+// gardiens), sleeveDark colore le liseré arrière de la manchette.
 export const HAND_PALETTES = {
   player: {
-    glove: '#fff4e4',
-    stitch: '#d8b9a8',
-    cuff: '#43d1ff',
-    cuffLip: '#e9fbff',
-    sleeve: '#2f63f0',
-    sleeveDark: '#1f3fae',
-    accent: '#ffd23f',
-    outline: '#1d1840',
-    glove_spec: 0,
+    glove: '#f6f2e8',
+    stitch: '#cdbfae',
+    cuff: '#2f86e8',
+    cuffLip: '#ffffff',
+    sleeve: '#2f86e8',
+    sleeveDark: '#1d5fbf',
+    accent: '#ffd34d',
+    outline: '#14213a',
+    glove_spec: 0.15,
   },
   bot: {
-    glove: '#e6e9f8',
-    stitch: '#a9b0cf',
-    cuff: '#ff4f7b',
-    cuffLip: '#ffe1ea',
-    sleeve: '#4a4470',
-    sleeveDark: '#2f2a4a',
-    accent: '#ff4f7b',
-    outline: '#1d1840',
-    glove_spec: 0.55,
+    glove: '#f2efe9',
+    stitch: '#cbc3c4',
+    cuff: '#e9505c',
+    cuffLip: '#ffffff',
+    sleeve: '#e9505c',
+    sleeveDark: '#b23444',
+    accent: '#e9505c',
+    outline: '#14213a',
+    glove_spec: 0.25,
   },
 };
 
@@ -137,30 +151,52 @@ function segmentGeometry(radius, length) {
   });
 }
 
-function cuffGeometry() {
-  return cached('cuff', () => {
-    // Profil fermé (extérieur puis intérieur) d'un revers évasé, axe +Y
+function bandGeometry() {
+  return cached('band', () => {
+    // Profil parcouru de bas en haut (normales vers l'extérieur), léger galbe au centre
+    const { half, radius } = BAND;
     const pts = [
-      [0.27, 0.0],
-      [0.3, -0.06],
-      [0.36, -0.16],
-      [0.44, -0.25],
-      [0.49, -0.3],
-      [0.5, -0.34],
-      [0.47, -0.37],
-      [0.41, -0.36],
-      [0.33, -0.3],
-      [0.27, -0.2],
-      [0.24, -0.06],
+      [0, -half],
+      [radius - 0.09, -half],
+      [radius - 0.02, -half + 0.05],
+      [radius, -half * 0.45],
+      [radius + 0.012, 0],
+      [radius, half * 0.45],
+      [radius - 0.02, half - 0.05],
+      [radius - 0.09, half],
+      [0, half],
     ].map(([r, y]) => new THREE.Vector2(r, y));
-    pts.push(pts[0].clone());
-    // LatheGeometry oriente ses normales vers l'extérieur pour un profil parcouru
-    // de bas en haut : on inverse l'ordre (sinon le contour recouvre la pièce).
-    pts.reverse();
-    const geo = new THREE.LatheGeometry(pts, 40);
+    const geo = new THREE.LatheGeometry(pts, 48);
     geo.rotateZ(-Math.PI / 2); // axe Y -> axe X
     return geo;
   });
+}
+
+/** Avant-bras du gant, légèrement évasé vers le coude, axe -X depuis le poignet. */
+function forearmGeometry(length) {
+  return cached(`forearm:${length}`, () => {
+    const geo = new THREE.CylinderGeometry(0.42, 0.37, length, 28, 1, true);
+    geo.rotateZ(Math.PI / 2); // +Y (coude) -> -X
+    geo.translate(-length / 2 - BAND.half + BAND.x + 0.08, 0, 0);
+    return geo;
+  });
+}
+
+function emblemShape(kind) {
+  const shape = new THREE.Shape();
+  const points = [];
+  if (kind === 'star') {
+    for (let i = 0; i < 10; i++) {
+      const r = i % 2 ? 0.055 : 0.13;
+      const a = (i / 10) * Math.PI * 2 + Math.PI / 2;
+      points.push([Math.cos(a) * r, Math.sin(a) * r]);
+    }
+  } else {
+    // Losange à facettes pour l'adversaire
+    points.push([0, 0.13], [0.1, 0], [0, -0.13], [-0.1, 0]);
+  }
+  points.forEach(([x, y], i) => (i ? shape.lineTo(x, y) : shape.moveTo(x, y)));
+  return shape;
 }
 
 // --- Rig ---------------------------------------------------------------------
@@ -181,6 +217,8 @@ export class HandRig {
 
     // Valeurs animées (interpolées par le gestionnaire de tweens)
     this.motion = { lift: 0, wrist: 0, twist: 0, push: 0, drop: 0, stretch: 1, glow: 0 };
+    // Geste de victoire (0..1), piloté par la mise en scène : main levée, doigts vers le ciel
+    this.flourish = 0;
     this.poseValues = {};
     this.channels = [];
 
@@ -212,7 +250,12 @@ export class HandRig {
         specSize: 0.94,
       }),
       stitch: toonMaterial({ color: p.stitch, rim: 0 }),
-      cuff: toonMaterial({ color: p.cuff, rim: 0.3, spec: 0.35 }),
+      forearm: toonMaterial({
+        color: new THREE.Color(p.glove).multiplyScalar(0.86),
+        ramp: RAMPS.smooth,
+        rim: 0.2,
+      }),
+      cuff: toonMaterial({ color: p.cuff, ramp: RAMPS.smooth, rim: 0.3, spec: 0.35 }),
       cuffLip: toonMaterial({ color: p.cuffLip, rim: 0.2 }),
       sleeve: toonMaterial({ color: p.sleeve, rim: 0.4, rimColor: '#c9d8ff' }),
       sleeveDark: toonMaterial({ color: p.sleeveDark, rim: 0.35, spec: 0.4 }),
@@ -231,6 +274,7 @@ export class HandRig {
     mats.glove.color.set(p.glove);
     mats.glove.userData.toon.uSpecStrength.value = p.glove_spec;
     mats.stitch.color.set(p.stitch);
+    mats.forearm.color.set(p.glove).multiplyScalar(0.86);
     mats.cuff.color.set(p.cuff);
     mats.cuffLip.color.set(p.cuffLip);
     mats.sleeve.color.set(p.sleeve);
@@ -243,9 +287,13 @@ export class HandRig {
   #buildHand() {
     const { glove, stitch } = this.mats;
 
+    // La main tourne autour de l'axe de l'avant-bras ; la manchette, elle, reste face caméra
+    const roll = new THREE.Group();
+    this.wrist.add(roll);
+    this.#channel('roll.0', roll, 'x');
     this.palm = new THREE.Group();
     this.palm.position.x = 0.62;
-    this.wrist.add(this.palm);
+    roll.add(this.palm);
 
     const palmMesh = toonMesh(palmGeometry(), glove, { outline: this.outline });
     this.palm.add(palmMesh);
@@ -297,68 +345,77 @@ export class HandRig {
       }),
     );
 
-    // Revers du gant
-    const cuff = toonMesh(cuffGeometry(), this.mats.cuff, { outline: this.outline });
-    cuff.position.x = 0.32;
-    this.wrist.add(cuff);
-    const lip = toonMesh(new THREE.TorusGeometry(0.48, 0.055, 12, 48), this.mats.cuffLip, {
-      outline: this.thinOutline,
-    });
-    lip.rotation.y = Math.PI / 2;
-    lip.position.x = 0.32 - 0.34;
-    this.wrist.add(lip);
+    // Éminence du pouce : relie le pouce à la paume (pas de capsule simplement posée)
+    const mound = toonMesh(
+      cached('mound', () => new THREE.SphereGeometry(1, 20, 14)),
+      glove,
+      {
+        outline: this.outline,
+      },
+    );
+    mound.scale.set(0.27, 0.19, 0.22);
+    mound.position.set(-0.13, PALM.h / 2 - 0.17, -0.05);
+    this.palm.add(mound);
+
+    // Manchette : bande épaisse, deux liserés et un emblème tourné vers la caméra
+    const band = toonMesh(bandGeometry(), this.mats.cuff, { outline: this.outline });
+    band.position.x = BAND.x;
+    this.wrist.add(band);
+    const stripeGeo = cached('band-stripe', () =>
+      new THREE.TorusGeometry(BAND.radius - 0.004, 0.034, 10, 48).rotateY(Math.PI / 2),
+    );
+    for (const dx of [-0.17, 0.17]) {
+      const stripe = toonMesh(stripeGeo, this.mats.cuffLip, { outline: null, cast: false });
+      stripe.position.x = BAND.x + dx;
+      this.wrist.add(stripe);
+    }
+    const disc = toonMesh(
+      cached('emblem-disc', () =>
+        new THREE.CylinderGeometry(0.17, 0.17, 0.07, 28).rotateX(Math.PI / 2),
+      ),
+      this.mats.cuffLip,
+      { outline: this.thinOutline, cast: false },
+    );
+    disc.position.set(BAND.x, 0, BAND.radius - 0.005);
+    this.wrist.add(disc);
+    const kind = this.team === 'player' ? 'star' : 'diamond';
+    const symbol = toonMesh(
+      cached(`emblem-${kind}`, () => new THREE.ShapeGeometry(emblemShape(kind))),
+      this.mats.accent,
+      { outline: null, cast: false },
+    );
+    symbol.position.set(BAND.x, 0, BAND.radius + 0.034);
+    this.wrist.add(symbol);
   }
 
   #buildArm() {
-    const { sleeve, sleeveDark, accent, led } = this.mats;
-    const sleeveLength = ARM_LENGTH + 4.5;
-    const sleeveMesh = toonMesh(segmentGeometry(0.34, sleeveLength), sleeve, {
+    const { forearm: forearmMat, sleeveDark, led } = this.mats;
+    // Avant-bras (gant long), plus mince et un ton plus sombre que la main : le regard
+    // reste sur la main et la manchette
+    const forearm = toonMesh(forearmGeometry(ARM_LENGTH + 4), forearmMat, {
       outline: this.outline,
     });
-    sleeveMesh.position.x = -sleeveLength;
-    this.arm.add(sleeveMesh);
+    this.arm.add(forearm);
+    const rim = toonMesh(
+      cached('band-rim', () =>
+        new THREE.TorusGeometry(BAND.radius - 0.05, 0.05, 10, 48).rotateY(Math.PI / 2),
+      ),
+      sleeveDark,
+      { outline: this.thinOutline, cast: false },
+    );
+    rim.position.x = BAND.x - BAND.half + 0.02;
+    this.arm.add(rim);
 
-    if (this.team === 'player') {
-      // Manche en tissu : bandes et coutures
-      for (const [x, mat] of [
-        [-0.32, sleeveDark],
-        [-0.62, accent],
-        [-0.86, sleeveDark],
-      ]) {
-        const band = toonMesh(new THREE.TorusGeometry(0.345, 0.05, 10, 40), mat, {
-          outline: this.thinOutline,
-        });
-        band.rotation.y = Math.PI / 2;
-        band.position.x = x;
-        this.arm.add(band);
-      }
-    } else {
-      // Bras robotique : anneaux segmentés, rivets et LED
-      for (let i = 0; i < 4; i++) {
-        const x = -0.3 - i * 0.55;
-        const ring = toonMesh(
-          new THREE.CylinderGeometry(0.39, 0.39, 0.16, 32).rotateZ(Math.PI / 2),
-          sleeveDark,
-          { outline: this.thinOutline },
-        );
-        ring.position.x = x;
-        this.arm.add(ring);
-        for (let k = 0; k < 6; k++) {
-          const a = (k / 6) * Math.PI * 2 + i * 0.4;
-          const rivet = toonMesh(new THREE.SphereGeometry(0.035, 10, 8), accent, {
-            outline: null,
-            cast: false,
-          });
-          rivet.position.set(x, Math.cos(a) * 0.395, Math.sin(a) * 0.395);
-          this.arm.add(rivet);
-        }
-      }
-      this.ledRing = new THREE.Mesh(new THREE.TorusGeometry(0.352, 0.03, 8, 48), led);
-      this.ledRing.rotation.y = Math.PI / 2;
-      this.ledRing.position.x = -0.58;
+    if (this.team === 'bot') {
+      // Témoin lumineux de l'IA (pulsation pendant qu'elle choisit), au bord de la manchette
+      this.ledRing = new THREE.Mesh(
+        new THREE.TorusGeometry(BAND.radius + 0.006, 0.02, 8, 48).rotateY(Math.PI / 2),
+        led,
+      );
+      this.ledRing.position.x = BAND.x;
       this.arm.add(this.ledRing);
-      this.ledGlow = glowSprite(this.palette.accent, 1.3, 0.35);
-      this.ledGlow.position.set(-0.58, 0, 0.2);
+      this.ledGlow = glowSprite(this.palette.accent, 1.1, 0.3);
+      this.ledGlow.position.set(BAND.x, 0, 0.35);
       this.arm.add(this.ledGlow);
     }
   }
@@ -378,11 +435,16 @@ export class HandRig {
     return flat;
   }
 
-  /** Place la hiérarchie dans la scène (position du poignet + orientation). */
-  place(position, { facing = 1, tilt = -0.22, yaw = 0 } = {}) {
+  /**
+   * Place la hiérarchie dans la scène (position du poignet + orientation).
+   * L'adversaire (facing < 0) est le reflet du joueur : on voit le dos des deux gants
+   * et leur emblème, comme deux mains qui se font face.
+   */
+  place(position, { facing = 1, tilt = 0.05, yaw = 0, scale = 1 } = {}) {
     this.basePosition.copy(position);
     this.root.position.copy(position);
     this.root.rotation.set(tilt, facing > 0 ? yaw : Math.PI + yaw, 0);
+    this.root.scale.set(scale, scale, facing > 0 ? scale : -scale);
     this.forward.set(facing, 0, 0);
     return this;
   }
@@ -414,8 +476,9 @@ export class HandRig {
     const bob = Math.sin(time * 2.2 + this.phase) * 0.03 * idle;
     const sway = Math.sin(time * 1.35 + this.phase * 2) * 0.05 * idle;
 
-    this.pivot.rotation.z = m.lift + bob;
-    this.wrist.rotation.z = m.wrist + sway;
+    const f = this.flourish;
+    this.pivot.rotation.z = m.lift + bob + 0.1 * f;
+    this.wrist.rotation.z = m.wrist + sway + 0.95 * f;
     this.wrist.rotation.x = m.twist;
     const s = m.stretch;
     this.wrist.scale.set(s, 1 / Math.sqrt(s), 1 / Math.sqrt(s));

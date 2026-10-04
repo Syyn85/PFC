@@ -11,6 +11,7 @@ import { createWorld } from './gfx/world.js';
 import { HandRig } from './gfx/hand.js';
 import { Effects } from './gfx/vfx.js';
 import { renderHandIcons } from './gfx/icons.js';
+import { Director } from './gfx/director.js';
 import { Hud } from './ui/hud.js';
 import { Sfx } from './audio/sfx.js';
 import { Music } from './audio/music.js';
@@ -29,9 +30,9 @@ function boot() {
   const player = new HandRig({ team: 'player' });
   const bot = new HandRig({ team: 'bot' });
   engine.scene.add(player.root, bot.root);
-  engine.onLayout = ({ handX }) => {
-    player.place(new THREE.Vector3(-handX, HAND_HEIGHT, 0), { facing: 1 });
-    bot.place(new THREE.Vector3(handX, HAND_HEIGHT, 0), { facing: -1 });
+  engine.onLayout = ({ handX, handScale }) => {
+    player.place(new THREE.Vector3(-handX, HAND_HEIGHT, 0), { facing: 1, scale: handScale });
+    bot.place(new THREE.Vector3(handX, HAND_HEIGHT, 0), { facing: -1, scale: handScale });
   };
   engine.resize();
 
@@ -64,6 +65,8 @@ function boot() {
   });
   game.enterTitle();
   world.setTheme('crepuscule', 0);
+  // Mise en scène (cadrage et lumière de fin de match) : lit l'état du jeu, ne le modifie pas
+  const director = new Director({ engine, world, player, bot, game });
 
   // Compile les shaders (y compris ceux des effets, masqués au repos) et fait une
   // image d'amorçage pour la passe d'ombre : pas de saccade à la première manche.
@@ -86,6 +89,7 @@ function boot() {
     bot.update(dt, time);
     effects.update(dt);
     game.update(dt, time);
+    director.update(dt);
     engine.updateCamera(dt, time);
     engine.render();
   });

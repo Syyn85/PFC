@@ -47,6 +47,7 @@ export class Engine {
       orbit: 0, // rotation autour de l'arène (radians)
       lift: 0, // décalage vertical de la cible
       trauma: 0, // intensité du tremblement (0..1)
+      focusX: 0, // décalage latéral du cadrage (mise en scène de fin de match)
     };
     // Résolution adaptative : si l'appareil peine, on baisse la densité de pixels ;
     // s'il redevient fluide, on la remonte, sans jamais dépasser la valeur de départ.
@@ -95,15 +96,17 @@ export class Engine {
     const wide = smoothstep(0.55, 1.4, aspect);
     const fov = THREE.MathUtils.lerp(50, 36, wide);
     const tanHalf = Math.tan(THREE.MathUtils.degToRad(fov / 2));
-    const handX = THREE.MathUtils.lerp(1.78, 1.95, wide);
-    const halfWidth = THREE.MathUtils.lerp(2.4, 3.7, wide);
-    const halfHeight = 2.1;
+    // Cadrage serré : les deux mains dominent la scène, le décor reste en arrière-plan
+    const handX = THREE.MathUtils.lerp(1.72, 2.02, wide);
+    const handScale = THREE.MathUtils.lerp(0.92, 1.0, wide);
+    const halfWidth = THREE.MathUtils.lerp(2.35, 3.45, wide);
+    const halfHeight = 1.95;
     const distance = Math.max(halfHeight / tanHalf, halfWidth / (tanHalf * aspect));
 
     this.camera.fov = fov;
     this.camera.aspect = aspect;
     this.camera.updateProjectionMatrix();
-    this.layout = { aspect, handX, distance, targetY: 1.5, portrait: aspect < 0.85 };
+    this.layout = { aspect, handX, handScale, distance, targetY: 1.45, portrait: aspect < 0.85 };
     this.onLayout?.(this.layout);
   }
 
@@ -185,8 +188,8 @@ export class Engine {
     const distance = layout.distance * rig.zoom;
     const yaw = rig.orbit + this.pointerSmooth.x * 0.05 * parallax;
     // Vecteur réutilisé : pas d'allocation à chaque image
-    const target = this.cameraTarget.set(0, layout.targetY + rig.lift, 0);
-    const height = distance * 0.16 - this.pointerSmooth.y * 0.25 * parallax;
+    const target = this.cameraTarget.set(rig.focusX, layout.targetY + rig.lift, 0);
+    const height = distance * 0.14 - this.pointerSmooth.y * 0.25 * parallax;
 
     camera.position.set(
       target.x + Math.sin(yaw) * distance,

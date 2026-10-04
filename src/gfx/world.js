@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { seededRandom } from '../core/random.js';
 import { createCloudSea, createSky, createStars } from './sky.js';
 import { THEMES } from './themes.js';
-import { RAMPS, canvasTexture, glowSprite, toonMaterial, toonMesh } from './toon.js';
+import { RAMPS, canvasTexture, toonMaterial, toonMesh } from './toon.js';
 import { bakeStatic } from './bake.js';
 import {
   createCloud,
@@ -178,6 +178,8 @@ export function createWorld(scene) {
   let current = themeState(THEMES.crepuscule);
   let transition = null;
   const lightning = { enabled: false, timer: 4, flash: 0, second: 0 };
+  // Mouvement réduit : éclairs gardés (son, rythme) mais flash lumineux très atténué.
+  const flashScale = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 0.15 : 1;
   const world = { update, setTheme, onLightning: null, key, hemi, sunDirection, coins };
 
   function applyAmbience(state) {
@@ -248,8 +250,9 @@ export function createWorld(scene) {
       }
     }
     lightning.flash *= Math.exp(-dt * 7);
-    uniforms.sky.uFlash.value = lightning.flash;
-    hemi.intensity = current.hemiIntensity + lightning.flash * 1.6;
+    const flash = lightning.flash * flashScale;
+    uniforms.sky.uFlash.value = flash;
+    hemi.intensity = current.hemiIntensity + flash * 1.6;
 
     for (const coin of coins) {
       const o = coin.userData.orbit;
@@ -345,10 +348,12 @@ function createIslandBody(rand) {
     p.setZ(i, z * k * 0.92);
   }
   grassGeo.computeVertexNormals();
+  // Le corps de l'île reçoit les ombres mais n'en projette pas : sous le plateau,
+  // elles ne tomberaient que sur la roche, hors champ (autant de moins dans la carte d'ombre).
   const grass = toonMesh(
     grassGeo,
     toonMaterial({ color: '#86d96a', ramp: RAMPS.hard, rim: 0.35, rimColor: '#f0ffd0' }),
-    { outline: OUTLINE },
+    { outline: OUTLINE, cast: false },
   );
   grass.position.y = -1.05;
   g.add(grass);
@@ -384,7 +389,7 @@ function createIslandBody(rand) {
       ramp: RAMPS.hard,
       rim: 0.25,
     }),
-    { outline: OUTLINE },
+    { outline: OUTLINE, cast: false },
   );
   rock.position.y = -1.3 - 3.75;
   g.add(rock);
@@ -392,6 +397,7 @@ function createIslandBody(rand) {
   // Rochers suspendus sous l'île
   for (let i = 0; i < 6; i++) {
     const hanging = createRock(rand, { size: 0.6 + rand() * 0.6, color: '#8a6489' });
+    hanging.castShadow = false;
     const a = rand() * Math.PI * 2;
     hanging.position.set(Math.cos(a) * 3.2, -8.6 - rand() * 1.2, Math.sin(a) * 3.2);
     g.add(hanging);
@@ -533,7 +539,7 @@ function createArena() {
     toonMaterial({ color: '#ffffff', map: floorTex, ramp: RAMPS.soft, rim: 0 }),
   );
   floor.position.y = 0.012;
-  floor.receiveShadow = true;
+  floor.receiveShadow = true; // reçoit l'ombre des mains sans en projeter
   g.add(floor);
 
   // Liseré doré
@@ -557,11 +563,6 @@ function createArena() {
     );
     g.add(stud);
   }
-
-  // Halo doux sous l'emblème central
-  const glow = glowSprite('#ffcb47', 2.2, 0.0);
-  glow.position.y = 0.3;
-  g.add(glow);
   return g;
 }
 

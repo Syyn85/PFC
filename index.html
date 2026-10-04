@@ -102,8 +102,9 @@
             <button id="play-btn" class="btn btn-ghost" type="button">Partie rapide</button>
           </div>
           <p class="hint">
-            Clavier : <kbd>1</kbd> Pierre · <kbd>2</kbd> Feuille · <kbd>3</kbd> Ciseaux ·
-            <kbd>B</kbd> Bouclier · <kbd>D</kbd> Double · <kbd>E</kbd> Espion
+            Clavier : <kbd>1</kbd> ou <kbd>P</kbd> Pierre · <kbd>2</kbd> ou <kbd>F</kbd> Feuille ·
+            <kbd>3</kbd> ou <kbd>C</kbd> Ciseaux · <kbd>B</kbd> Bouclier · <kbd>D</kbd> Double ·
+            <kbd>E</kbd> Espion
           </p>
         </div>
       </section>
@@ -161,8 +162,9 @@
         <div id="fair-panel" class="fair-panel" hidden>
           <p class="fair-explain">
             Avant ton choix, l'IA publie l'empreinte SHA-256 de son coup, de son atout éventuel et
-            d'un sel secret. Après la révélation, on recalcule l'empreinte : si elle correspond,
-            l'IA n'a pas pu tricher.
+            d'un sel secret. Après la révélation, on recalcule l'empreinte de la chaîne ci-dessous :
+            si elle correspond, l'IA n'a pas changé d'avis. En mode démo, tout se passe dans ton
+            navigateur ; en ligne, ce contrôle reviendra au serveur ou au contrat.
           </p>
           <dl>
             <dt>Empreinte</dt>
@@ -173,24 +175,53 @@
             <dd><code id="fair-boost">en attente</code></dd>
             <dt>Sel</dt>
             <dd><code id="fair-salt">en attente</code></dd>
+            <dt>Chaîne</dt>
+            <dd><code id="fair-preimage">en attente</code></dd>
           </dl>
         </div>
       </section>
 
-      <div id="bubble" class="bubble" hidden aria-live="polite">
+      <!-- Choix des atouts avant le match -->
+      <section id="screen-draft" class="screen screen-draft" hidden aria-labelledby="draft-name">
+        <div class="draft-panel" role="dialog" aria-modal="true" aria-labelledby="draft-name">
+          <header class="draft-header">
+            <button id="draft-back" class="icon-btn" type="button" aria-label="Retour">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path class="wave" d="M15 5l-7 7 7 7" />
+              </svg>
+            </button>
+            <div class="draft-heading">
+              <p id="draft-island" class="draft-island"></p>
+              <h2 id="draft-name" class="draft-name"></h2>
+              <p id="draft-title" class="draft-title"></p>
+            </div>
+          </header>
+          <div id="draft-tags" class="draft-tags"></div>
+          <p id="draft-count" class="draft-count"></p>
+          <div
+            id="draft-options"
+            class="draft-options"
+            role="group"
+            aria-labelledby="draft-count"
+          ></div>
+          <button id="draft-go" class="btn btn-primary" type="button" disabled>Au combat !</button>
+        </div>
+      </section>
+
+      <div id="bubble" class="bubble" hidden>
         <span id="bubble-name" class="bubble-name"></span>
         <p id="bubble-text" class="bubble-text"></p>
       </div>
 
-      <div id="callout" class="callout" aria-live="assertive"></div>
+      <div id="callout" class="callout" aria-hidden="true"></div>
 
-      <section id="versus" class="versus" hidden aria-live="polite">
+      <section id="versus" class="versus" hidden>
         <p id="versus-island" class="versus-island"></p>
         <p id="versus-name" class="versus-name"></p>
         <p id="versus-title" class="versus-title"></p>
       </section>
 
-      <section id="round-result" class="round-result" hidden aria-live="polite">
+      <section id="round-result" class="round-result" hidden>
         <p id="result-title" class="result-title"></p>
         <p id="result-sub" class="result-sub"></p>
         <p id="result-boost" class="result-boost" hidden></p>
@@ -232,7 +263,8 @@
         </div>
         <p id="choices-prompt" class="choices-prompt">Choisis ton coup</p>
         <div id="timer" class="timer" hidden>
-          <div id="timer-fill" class="timer-fill"></div>
+          <div class="timer-track"><div id="timer-fill" class="timer-fill"></div></div>
+          <span id="timer-text" class="timer-text" aria-hidden="true"></span>
         </div>
         <div class="cards">
           <button type="button" class="card card-rock" data-move="rock">
@@ -258,7 +290,7 @@
 
       <!-- Fin de match -->
       <section id="screen-end" class="screen screen-end" hidden aria-labelledby="end-title">
-        <div class="end-card">
+        <div class="end-card" role="dialog" aria-modal="true" aria-labelledby="end-title">
           <h2 id="end-title" class="end-title">Victoire !</h2>
           <p id="end-sub" class="end-sub"></p>
           <dl id="end-stats" class="end-stats"></dl>
@@ -275,6 +307,7 @@
       </section>
 
       <div id="toast" class="toast" role="status" aria-live="polite"></div>
+      <p id="sr-log" class="sr-only" aria-live="polite" aria-atomic="true"></p>
     </div>
     <script type="module" src="/src/main.js"></script>
   </body>

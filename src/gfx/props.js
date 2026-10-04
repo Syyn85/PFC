@@ -282,7 +282,9 @@ export function createCoin({ radius = 0.5, thickness = 0.12, outline = OUTLINE }
     spec: 0.8,
     specSize: 0.9,
   });
-  g.add(toonMesh(coinGeometryCache[key], gold, { outline }));
+  // Pièces en orbite haut au-dessus de l'île : leur ombre ne se verrait presque pas,
+  // on les laisse hors de la carte d'ombre (bord et faces).
+  g.add(toonMesh(coinGeometryCache[key], gold, { outline, cast: false }));
   const faceMat = mat('coin-face', {
     color: '#ffffff',
     map: getCoinFaceTexture(),
@@ -295,7 +297,6 @@ export function createCoin({ radius = 0.5, thickness = 0.12, outline = OUTLINE }
     const face = new THREE.Mesh(faceGeo, faceMat);
     face.position.z = (thickness / 2 + 0.002) * side;
     if (side < 0) face.rotation.y = Math.PI;
-    face.castShadow = true;
     g.add(face);
   }
   return g;
@@ -314,7 +315,8 @@ export function createCloud(rand, { scale = 1, color = '#fff0f4' } = {}) {
   const puffs = 4 + Math.floor(rand() * 4);
   for (let i = 0; i < puffs; i++) {
     const r = 0.8 + rand() * 0.9;
-    const puff = toonMesh(new THREE.SphereGeometry(r, 18, 12), material, {
+    // Tessellation légère : nuages lointains, le contour lissé garde la silhouette ronde
+    const puff = toonMesh(new THREE.SphereGeometry(r, 10, 7), material, {
       outline: { color: '#8f5f9e', thickness: 1.6 },
       cast: false,
       receive: false,

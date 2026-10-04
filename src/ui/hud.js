@@ -1,6 +1,12 @@
+import { keyToBoost, keyToMove } from './keys.js';
+
 const $ = (selector) => document.querySelector(selector);
-const KEY_TO_MOVE = { 1: 'rock', 2: 'paper', 3: 'scissors', p: 'rock', f: 'paper', c: 'scissors' };
-const KEY_TO_BOOST = { b: 'shield', d: 'double', e: 'spy' };
+const INTERACTIVE = 'button, a, input, select, textarea, summary, [tabindex]';
+const BOOST_INFO = {
+  shield: { label: 'Bouclier', text: 'Si tu perds la manche, ton adversaire ne marque pas.' },
+  double: { label: 'Double', text: 'Si tu gagnes la manche, elle vaut 2 points.' },
+  spy: { label: 'Espion', text: "Révèle un coup que l'adversaire n'a pas joué." },
+};
 
 const create = (tag, className, text) => {
   const el = document.createElement(tag);
@@ -38,6 +44,7 @@ export class Hud {
       fairMove: $('#fair-move'),
       fairBoost: $('#fair-boost'),
       fairSalt: $('#fair-salt'),
+      fairPreimage: $('#fair-preimage'),
       bubble: $('#bubble'),
       bubbleName: $('#bubble-name'),
       bubbleText: $('#bubble-text'),
@@ -56,6 +63,17 @@ export class Hud {
       boosts: [...document.querySelectorAll('.boost')],
       timer: $('#timer'),
       timerFill: $('#timer-fill'),
+      timerText: $('#timer-text'),
+      srLog: $('#sr-log'),
+      draft: $('#screen-draft'),
+      draftIsland: $('#draft-island'),
+      draftName: $('#draft-name'),
+      draftTitle: $('#draft-title'),
+      draftTags: $('#draft-tags'),
+      draftCount: $('#draft-count'),
+      draftOptions: $('#draft-options'),
+      draftGo: $('#draft-go'),
+      draftBack: $('#draft-back'),
       cards: [...document.querySelectorAll('.card')],
       end: $('#screen-end'),
       endCard: document.querySelector('.end-card'),
@@ -77,6 +95,9 @@ export class Hud {
     };
     this.handlers = {};
     this.choosing = false;
+    this.keyboardUser = false;
+    this.draftSelection = [];
+    this.draftSize = 1;
     this.#bind();
   }
 
@@ -125,32 +146,53 @@ export class Hud {
         () => this.choosing && this.#emit('boost', boost.dataset.boost),
       );
     }
+    el.draftGo.addEventListener('click', () => {
+      if (this.draftSelection.length === this.draftSize)
+        this.#emit('draftConfirm', [...this.draftSelection]);
+    });
+    el.draftBack.addEventListener('click', () => this.#emit('draftCancel'));
     el.fairPill.addEventListener('click', () => {
       const open = el.fairPanel.hidden;
       el.fairPanel.hidden = !open;
       el.fairPill.setAttribute('aria-expanded', String(open));
     });
+    // Mémorise le mode de saisie pour gérer le focus (clavier) sans gêner la souris
+    window.addEventListener('pointerdown', () => (this.keyboardUser = false), true);
     window.addEventListener('keydown', (event) => {
+      this.keyboardUser = true;
       if (event.repeat || event.metaKey || event.ctrlKey || event.altKey) return;
       const key = event.key.toLowerCase();
-      if (this.choosing && KEY_TO_MOVE[key]) {
+      const move = this.choosing ? keyToMove(event) : null;
+      const boost = this.choosing ? keyToBoost(event) : null;
+      if (move) {
         event.preventDefault();
-        this.#emit('choose', KEY_TO_MOVE[key]);
-      } else if (this.choosing && KEY_TO_BOOST[key]) {
+        this.#emit('choose', move);
+      } else if (boost) {
         event.preventDefault();
-        this.#emit('boost', KEY_TO_BOOST[key]);
-      } else if (key === 'enter' && !el.title.hidden) {
+        this.#emit('boost', boost);
+      } else if (key === 'enter' && !el.title.hidden && !event.target.closest?.(INTERACTIVE)) {
+        // Entrée « dans le vide » lance la campagne ; sur un bouton, on laisse le bouton agir
         event.preventDefault();
         this.#emit('openMap');
       } else if (key === 'escape' && !el.map.hidden) {
         event.preventDefault();
         this.#emit('closeMap');
+      } else if (key === 'escape' && !el.draft.hidden) {
+        event.preventDefault();
+        this.#emit('draftCancel');
       }
     });
   }
 
   ready() {
     this.el.loader.classList.add('is-done');
+  }
+
+  /** Annonce un message aux lecteurs d'écran (région live toujours présente). */
+  announce(text) {
+    const { srLog } = this.el;
+    srLog.textContent = '';
+    requestAnimationFrame(() => (srLog.textContent = text));
   }
 
   // --- Barre du haut ---
@@ -202,11 +244,23 @@ export class Hud {
       return chip;
     });
     this.el.formatPicker.replaceChildren(...this.el.formats);
+    this.el.formatPicker.onkeydown = (event) => {
+      const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
+      if (!step) return;
+      event.preventDefault();
+      const chips = this.el.formats;
+      const current = chips.findIndex((c) => c.getAttribute('aria-checked') === 'true');
+      const next = chips[(current + step + chips.length) % chips.length];
+      next.click();
+      next.focus();
+    };
   }
 
   setFormat(formatId) {
     for (const chip of this.el.formats) {
-      chip.setAttribute('aria-checked', String(chip.dataset.format === formatId));
+      const checked = chip.dataset.format === formatId;
+      chip.setAttribute('aria-checked', String(checked));
+      chip.tabIndex = checked ? 0 : -1;
     }
   }
 
@@ -264,6 +318,78 @@ export class Hud {
     );
   }
 
+  // --- Choix des atouts avant le match ---
+
+  /**
+   * opts : { island, name, title, tags: string[], size, preselected: string[] }
+   * La sélection est gérée ici ; seule la validation remonte au contrôleur.
+   */
+  showDraft({ island, name, title, tags, size, preselected = [] }) {
+    const { el } = this;
+    this.draftSize = size;
+    this.draftSelection = preselected.slice(0, size);
+    el.draftIsland.textContent = island;
+    el.draftName.textContent = name;
+    el.draftTitle.textContent = title;
+    el.draftTags.replaceChildren(...tags.map((t) => create('span', 'tag', t)));
+    el.draftCount.textContent =
+      size > 1 ? `Choisis ${size} atouts pour ce match` : 'Choisis 1 atout pour ce match';
+    el.draftOptions.replaceChildren(
+      ...Object.entries(BOOST_INFO).map(([kind, info]) => {
+        const option = create('button', `draft-option draft-${kind}`);
+        option.type = 'button';
+        option.dataset.boost = kind;
+        option.append(
+          create('span', 'boost-icon', kind === 'double' ? '×2' : ''),
+          create('strong', 'draft-option-name', info.label),
+          create('span', 'draft-option-text', info.text),
+        );
+        option.addEventListener('click', () => this.#toggleDraft(kind));
+        return option;
+      }),
+    );
+    this.#renderDraft();
+    el.draft.hidden = false;
+    (el.draftOptions.querySelector('[aria-pressed="true"]') ?? el.draftOptions.firstChild)?.focus({
+      preventScroll: true,
+    });
+  }
+
+  #toggleDraft(kind) {
+    const selection = this.draftSelection;
+    if (selection.includes(kind)) {
+      this.draftSelection = selection.filter((k) => k !== kind);
+    } else if (this.draftSize === 1) {
+      this.draftSelection = [kind];
+    } else if (selection.length < this.draftSize) {
+      this.draftSelection = [...selection, kind];
+    } else {
+      // Sélection pleine : le plus ancien choix cède sa place
+      this.draftSelection = [...selection.slice(1), kind];
+    }
+    this.#emit('draftToggle', kind);
+    this.#renderDraft();
+  }
+
+  #renderDraft() {
+    const { el } = this;
+    for (const option of el.draftOptions.children) {
+      option.setAttribute(
+        'aria-pressed',
+        String(this.draftSelection.includes(option.dataset.boost)),
+      );
+    }
+    const ready = this.draftSelection.length === this.draftSize;
+    el.draftGo.disabled = !ready;
+    el.draftGo.textContent = ready
+      ? 'Au combat !'
+      : `Encore ${this.draftSize - this.draftSelection.length} à choisir`;
+  }
+
+  hideDraft() {
+    this.el.draft.hidden = true;
+  }
+
   // --- HUD de match ---
 
   showHud(visible) {
@@ -285,8 +411,11 @@ export class Hud {
     this.el.botBoosts.hidden = kinds.length === 0;
     if (!kinds.length) return;
     const icons = kinds.map(([kind]) => {
-      const icon = create('span', `mini-boost is-${kind}${remaining[kind] > 0 ? '' : ' is-used'}`);
-      icon.title = kind === 'shield' ? 'Bouclier' : 'Double';
+      const used = !(remaining[kind] > 0);
+      const icon = create('span', `mini-boost is-${kind}${used ? ' is-used' : ''}`);
+      const label = `${BOOST_INFO[kind].label} ${used ? 'utilisé' : 'disponible'}`;
+      icon.title = label;
+      icon.append(create('span', 'sr-only', label));
       return icon;
     });
     this.el.botBoosts.replaceChildren(create('span', '', 'Atouts IA'), ...icons);
@@ -314,16 +443,33 @@ export class Hud {
     this.el.streak.textContent = `Série ×${streak}`;
   }
 
-  /** state : { hash } avant révélation, puis { hash, move, boost, salt, verified } */
-  setFairness({ hash, move = null, boost = null, salt = null, verified = null }) {
+  /**
+   * state : { hash } avant révélation, puis { hash, move, boost, salt, verified, labels }
+   * labels : { move: 'Pierre', boost: 'Bouclier' } pour l'affichage en français.
+   */
+  setFairness({ hash, move = null, boost = null, salt = null, verified = null, labels = {} }) {
     const { el } = this;
+    const revealed = verified !== null;
     el.fairHash.textContent = hash;
-    el.fairMove.textContent = move ?? 'en attente';
-    el.fairBoost.textContent = verified === null ? 'en attente' : (boost ?? 'aucun');
+    el.fairMove.textContent = revealed ? `${labels.move ?? move} (${move})` : 'en attente';
+    el.fairBoost.textContent = revealed
+      ? `${labels.boost ?? 'aucun'} (${boost ?? 'none'})`
+      : 'en attente';
     el.fairSalt.textContent = salt ?? 'en attente';
+    el.fairPreimage.textContent = revealed ? `${move}:${boost ?? 'none'}:${salt}` : 'en attente';
     el.fairPill.classList.toggle('is-verified', verified === true);
     if (verified === null) el.fairText.textContent = `Coup de l'IA scellé · ${hash.slice(0, 6)}…`;
     else el.fairText.textContent = verified ? 'Équité vérifiée' : 'Échec de vérification !';
+  }
+
+  /** Remet la pastille d'équité à zéro (début de match). */
+  resetFairness() {
+    const { el } = this;
+    el.fairPill.classList.remove('is-verified');
+    el.fairText.textContent = "Coup de l'IA scellé";
+    for (const node of [el.fairHash, el.fairMove, el.fairBoost, el.fairSalt, el.fairPreimage]) {
+      node.textContent = 'en attente';
+    }
   }
 
   // --- Choix du coup ---
@@ -331,13 +477,20 @@ export class Hud {
   showChoices(visible) {
     this.choosing = visible;
     this.el.choices.hidden = !visible;
+    // Au clavier, le focus doit rester utilisable d'une manche à l'autre
+    if (visible && this.keyboardUser) this.el.cards[0].focus({ preventScroll: true });
   }
 
-  /** state : { shield: {count, armed}, double: {count, armed}, spy: {count} } */
+  /** Atouts emportés dans le match : les autres boutons sont masqués. */
+  setBoostKinds(kinds) {
+    for (const button of this.el.boosts) button.hidden = !kinds.includes(button.dataset.boost);
+  }
+
+  /** state : { shield: {count, armed, available}, double: {…}, spy: {count, available} } */
   setBoosts(state) {
     for (const button of this.el.boosts) {
       const info = state[button.dataset.boost];
-      button.disabled = !info || info.count <= 0;
+      button.disabled = !info || info.count <= 0 || info.available === false;
       if (button.hasAttribute('aria-pressed')) {
         button.setAttribute('aria-pressed', String(Boolean(info?.armed)));
       }
@@ -354,12 +507,13 @@ export class Hud {
     }
   }
 
-  /** fraction : 1 → 0, ou null pour masquer le chronomètre. */
-  setTimer(fraction, { urgent = false } = {}) {
-    const { timer, timerFill } = this.el;
+  /** fraction : 1 → 0 (et secondes restantes), ou null pour masquer le chronomètre. */
+  setTimer(fraction, { urgent = false, seconds = null } = {}) {
+    const { timer, timerFill, timerText } = this.el;
     timer.hidden = fraction === null;
     if (fraction === null) return;
     timerFill.style.transform = `scaleX(${Math.max(0, fraction)})`;
+    timerText.textContent = seconds === null ? '' : `${seconds} s`;
     timer.classList.toggle('is-urgent', urgent);
   }
 
@@ -459,6 +613,7 @@ export class Hud {
     el.menu.textContent = menuLabel;
     el.end.hidden = false;
     (nextVisible ? el.next : el.again).focus({ preventScroll: true });
+    this.announce(`${title} ${sub}.${bonus ? ` ${bonus}.` : ''}${reward ? ` ${reward}.` : ''}`);
   }
 
   hideEnd() {

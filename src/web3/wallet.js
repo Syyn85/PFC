@@ -1,5 +1,5 @@
 import { CONFIG } from '../config.js';
-import { readJSON, writeJSON } from '../core/storage.js';
+import { readJSON, safeStorage, writeJSON } from '../core/storage.js';
 
 /**
  * Couche "portefeuille".
@@ -28,9 +28,16 @@ export class DemoWallet {
   #listeners = new Set();
   #state;
 
-  constructor(storageKey = 'pfc:demo-wallet') {
-    this.storageKey = storageKey;
+  constructor({ key = 'pfc:demo-wallet', storage = safeStorage() } = {}) {
+    this.storageKey = key;
+    this.storage = storage;
     this.#state = this.#load();
+    // Un autre onglet a crédité des jetons : on se resynchronise.
+    globalThis.addEventListener?.('storage', (event) => {
+      if (event.key !== this.storageKey) return;
+      this.#state = this.#load();
+      this.#notify();
+    });
   }
 
   get balance() {
@@ -49,11 +56,14 @@ export class DemoWallet {
 
   credit(amount, reason) {
     if (!Number.isFinite(amount) || amount <= 0) return;
-    this.#state.balance += amount;
-    this.#state.history.unshift({ amount, reason, at: Date.now() });
-    this.#state.history.length = Math.min(this.#state.history.length, 50);
-    this.#save();
-    for (const listener of this.#listeners) listener(this);
+    // Lecture-modification-écriture : ne jamais écraser un crédit fait ailleurs.
+    const state = this.#load();
+    state.balance += amount;
+    state.history.unshift({ amount, reason, at: Date.now() });
+    state.history.length = Math.min(state.history.length, 50);
+    this.#state = state;
+    writeJSON(this.storageKey, state, this.storage);
+    this.#notify();
   }
 
   subscribe(listener) {
@@ -62,13 +72,14 @@ export class DemoWallet {
     return () => this.#listeners.delete(listener);
   }
 
-  #load() {
-    const saved = readJSON(this.storageKey, null);
-    if (saved && Number.isFinite(saved.balance) && Array.isArray(saved.history)) return saved;
-    return { balance: 0, history: [] };
+  #notify() {
+    for (const listener of this.#listeners) listener(this);
   }
 
-  #save() {
-    writeJSON(this.storageKey, this.#state);
+  #load() {
+    const saved = readJSON(this.storageKey, null, this.storage);
+    if (saved && Number.isFinite(saved.balance) && Array.isArray(saved.history)) return saved;
+    // Stockage indisponible : on garde l'état en mémoire plutôt que de le perdre
+    return this.#state ?? { balance: 0, history: [] };
   }
 }

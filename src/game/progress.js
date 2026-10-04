@@ -11,8 +11,19 @@ export class CampaignProgress {
     this.opponents = opponents;
     this.storage = storage;
     this.key = key;
-    const saved = readJSON(key, null, storage);
-    this.cleared = new Set(Array.isArray(saved?.cleared) ? saved.cleared : []);
+    this.cleared = new Set();
+    this.reload();
+  }
+
+  /**
+   * Relit la sauvegarde et la fusionne avec l'état en mémoire : un autre onglet
+   * a pu libérer des îles entre-temps, et on ne doit jamais en perdre.
+   */
+  reload() {
+    const saved = readJSON(this.key, null, this.storage);
+    if (Array.isArray(saved?.cleared)) {
+      for (const id of saved.cleared) if (typeof id === 'string') this.cleared.add(id);
+    }
   }
 
   isCleared(id) {
@@ -28,6 +39,7 @@ export class CampaignProgress {
 
   /** Retourne true si c'est la première victoire contre cet adversaire. */
   markCleared(id) {
+    this.reload();
     if (this.cleared.has(id)) return false;
     this.cleared.add(id);
     writeJSON(this.key, { cleared: [...this.cleared] }, this.storage);
@@ -49,17 +61,22 @@ export class DailyRewards {
     this.storage = storage;
     this.key = key;
     this.now = now;
-    this.state = readJSON(key, { day: null, earned: 0 }, storage);
   }
 
-  #refresh() {
+  /**
+   * État du jour, relu à chaque accès : la sauvegarde peut avoir été modifiée
+   * par un autre onglet, ou être corrompue (on repart alors de zéro).
+   */
+  #load() {
     const today = dayKey(this.now());
-    if (this.state.day !== today) this.state = { day: today, earned: 0 };
+    const saved = readJSON(this.key, null, this.storage);
+    const valid =
+      saved && saved.day === today && Number.isFinite(saved.earned) && saved.earned >= 0;
+    return valid ? { day: today, earned: saved.earned } : { day: today, earned: 0 };
   }
 
   get earnedToday() {
-    this.#refresh();
-    return this.state.earned;
+    return this.#load().earned;
   }
 
   get remaining() {
@@ -68,11 +85,11 @@ export class DailyRewards {
 
   /** Accorde au plus `amount`, dans la limite du plafond. Retourne le montant accordé. */
   grant(amount) {
-    this.#refresh();
-    const granted = Math.max(0, Math.min(amount, this.cap - this.state.earned));
+    const state = this.#load();
+    const granted = Math.max(0, Math.min(amount, this.cap - state.earned));
     if (granted > 0) {
-      this.state.earned += granted;
-      writeJSON(this.key, this.state, this.storage);
+      state.earned += granted;
+      writeJSON(this.key, state, this.storage);
     }
     return granted;
   }

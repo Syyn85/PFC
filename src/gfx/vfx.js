@@ -28,6 +28,10 @@ class ParticlePool {
       floor: -Infinity,
     }));
     this.cursor = 0;
+    // Réserve vide = rien à dessiner : le mesh (et son contour, enfant) reste masqué
+    // tant qu'aucune particule n'est vivante, y compris dans la carte d'ombre.
+    this.alive = 0;
+    this.mesh.visible = false;
     this._m = new THREE.Matrix4();
     this._q = new THREE.Quaternion();
     this._s = new THREE.Vector3();
@@ -39,6 +43,8 @@ class ParticlePool {
     const index = this.cursor;
     const p = this.particles[index];
     this.cursor = (this.cursor + 1) % this.particles.length;
+    if (!p.alive) this.alive += 1;
+    this.mesh.visible = true;
     p.alive = true;
     p.life = 0;
     p.pos.copy(init.pos);
@@ -56,13 +62,13 @@ class ParticlePool {
   }
 
   update(dt) {
-    let any = false;
+    if (this.alive === 0) return;
     this.particles.forEach((p, i) => {
       if (!p.alive) return;
-      any = true;
       p.life += dt;
       if (p.life >= p.maxLife) {
         p.alive = false;
+        this.alive -= 1;
         this.mesh.setMatrixAt(i, this._zero);
         return;
       }
@@ -85,7 +91,8 @@ class ParticlePool {
       this._m.compose(p.pos, this._q, this._s);
       this.mesh.setMatrixAt(i, this._m);
     });
-    if (any) this.mesh.instanceMatrix.needsUpdate = true;
+    this.mesh.instanceMatrix.needsUpdate = true;
+    if (this.alive === 0) this.mesh.visible = false;
   }
 }
 

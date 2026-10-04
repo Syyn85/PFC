@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { MOVES, counterOf, resolveRound, verdictFor } from '../src/game/rules.js';
-import { Match, computeRoundRewards } from '../src/game/match.js';
+import { Match, boostsFromDraft, computeRoundRewards, draftSize } from '../src/game/match.js';
 import { chooseBotBoost, createBot, spyHint } from '../src/game/bot.js';
 import { CampaignProgress, DailyRewards } from '../src/game/progress.js';
 import { CAMPAIGN, nextOpponent } from '../src/game/opponents.js';
 import { memoryStorage } from '../src/core/storage.js';
+import { DemoWallet } from '../src/web3/wallet.js';
+import { keyToBoost, keyToMove } from '../src/ui/keys.js';
 import {
   createCommitment,
   secureRandomInt,
@@ -117,6 +119,63 @@ describe('Match', () => {
     expect(() => match.playRound('rock', 'rock', { playerBoost: 'spy' })).toThrow();
     match.consume('player', 'spy');
     expect(match.canUse('player', 'spy')).toBe(false);
+  });
+});
+
+describe('atouts et séries', () => {
+  it("l'Espion ne se cumule pas avec Bouclier ou Double sur la même manche", () => {
+    const match = new Match({ winsNeeded: 3 });
+    expect(match.canSpy('shield')).toBe(false);
+    match.useSpy();
+    expect(match.canArm('shield')).toBe(false);
+    expect(match.canArm('double')).toBe(false);
+    expect(() => match.playRound('rock', 'scissors', { playerBoost: 'double' })).toThrow();
+    const round = match.playRound('rock', 'scissors');
+    expect(round.spied).toBe(true);
+    // Manche suivante : l'Espion est épuisé, mais Bouclier et Double redeviennent armables
+    expect(match.canArm('shield')).toBe(true);
+    expect(match.canSpy()).toBe(false);
+  });
+
+  it('choix des atouts avant le match : 1 en 2 manches gagnantes, 2 au-delà', () => {
+    expect(draftSize(2)).toBe(1);
+    expect(draftSize(3)).toBe(2);
+    expect(boostsFromDraft(['spy'])).toEqual({ shield: 0, double: 0, spy: 1 });
+    expect(boostsFromDraft(['shield', 'double'])).toEqual({ shield: 1, double: 1, spy: 0 });
+    expect(() => boostsFromDraft(['laser'])).toThrow();
+    const match = new Match({ winsNeeded: 2, playerBoosts: boostsFromDraft(['shield']) });
+    expect(match.canArm('double')).toBe(false);
+    expect(match.canSpy()).toBe(false);
+  });
+
+  it("la série se prolonge d'un match gagné au suivant et déclenche le bonus en 2 manches gagnantes", () => {
+    const first = new Match({ winsNeeded: 2 });
+    first.playRound('rock', 'scissors');
+    first.playRound('rock', 'scissors');
+    expect(first.streak).toBe(2);
+    const second = new Match({ winsNeeded: 2, streak: first.streak });
+    const round = second.playRound('paper', 'rock');
+    expect(round.streak).toBe(3);
+    const rewards = computeRoundRewards(round, CONFIG.rewards);
+    expect(rewards.items.map((i) => i.label)).toContain('Série de 3');
+  });
+});
+
+describe('clavier', () => {
+  it('lit les chiffres par touche physique (AZERTY)', () => {
+    expect(keyToMove({ code: 'Digit1', key: '&' })).toBe('rock');
+    expect(keyToMove({ code: 'Digit2', key: 'é' })).toBe('paper');
+    expect(keyToMove({ code: 'Digit3', key: '"' })).toBe('scissors');
+    expect(keyToMove({ code: 'Numpad2', key: '2' })).toBe('paper');
+  });
+
+  it('accepte les initiales P, F, C et les atouts B, D, E', () => {
+    expect(keyToMove({ code: 'KeyP', key: 'p' })).toBe('rock');
+    expect(keyToMove({ code: 'KeyF', key: 'F' })).toBe('paper');
+    expect(keyToMove({ code: 'KeyC', key: 'c' })).toBe('scissors');
+    expect(keyToMove({ code: 'KeyX', key: 'x' })).toBeNull();
+    expect(keyToBoost({ key: 'B' })).toBe('shield');
+    expect(keyToBoost({ key: 'e' })).toBe('spy');
   });
 });
 
@@ -239,6 +298,47 @@ describe('campagne', () => {
     now = new Date(2026, 9, 4, 9);
     expect(daily.remaining).toBe(10);
     expect(daily.grant(5)).toBe(5);
+  });
+
+  it('résiste à une sauvegarde quotidienne corrompue', () => {
+    for (const raw of ['null', '{}', '{"day":"2026-10-03","earned":"abc"}', 'pas du json']) {
+      const storage = memoryStorage();
+      storage.setItem('pfc:daily', raw);
+      const daily = new DailyRewards({ cap: 10, storage, now: () => new Date(2026, 9, 3) });
+      expect(daily.remaining).toBe(10);
+      expect(daily.grant(4)).toBe(4);
+    }
+  });
+
+  it('deux onglets partagent le même plafond', () => {
+    const storage = memoryStorage();
+    const now = () => new Date(2026, 9, 3, 12);
+    const tabA = new DailyRewards({ cap: 10, storage, now });
+    const tabB = new DailyRewards({ cap: 10, storage, now });
+    expect(tabA.grant(6)).toBe(6);
+    expect(tabB.grant(6)).toBe(4);
+    expect(tabA.remaining).toBe(0);
+  });
+
+  it('deux onglets ne perdent ni îles ni bonus de première victoire', () => {
+    const storage = memoryStorage();
+    const tabA = new CampaignProgress(CAMPAIGN, { storage });
+    const tabB = new CampaignProgress(CAMPAIGN, { storage });
+    expect(tabA.markCleared('roc')).toBe(true);
+    expect(tabB.markCleared('roc')).toBe(false); // bonus déjà versé dans l'autre onglet
+    expect(tabB.markCleared('echo')).toBe(true);
+    const reloaded = new CampaignProgress(CAMPAIGN, { storage });
+    expect(reloaded.isCleared('roc') && reloaded.isCleared('echo')).toBe(true);
+  });
+
+  it("deux onglets ne s'écrasent pas leurs crédits", () => {
+    const storage = memoryStorage();
+    const tabA = new DemoWallet({ storage });
+    const tabB = new DemoWallet({ storage });
+    tabA.credit(10, 'a');
+    tabB.credit(5, 'b');
+    expect(tabB.balance).toBe(15);
+    expect(new DemoWallet({ storage }).balance).toBe(15);
   });
 });
 

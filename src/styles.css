@@ -1591,9 +1591,11 @@ kbd {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
   gap: 10px;
-  width: min(480px, 100%);
+  /* 46vw au plus : la main essayée, à gauche, reste visible à toutes les largeurs */
+  width: min(480px, 100%, 46vw);
   max-height: 100%;
   padding: 18px;
+  container-type: inline-size;
   border: 4px solid var(--ink);
   border-radius: 28px;
   background: linear-gradient(to bottom, rgba(59, 44, 122, 0.96), rgba(42, 31, 99, 0.96));
@@ -1698,7 +1700,8 @@ kbd {
   white-space: nowrap;
 }
 
-.glove-action:disabled {
+.glove-action:disabled,
+.glove-action[aria-disabled='true'] {
   cursor: default;
   filter: grayscale(0.4);
   opacity: 0.8;
@@ -1728,23 +1731,8 @@ kbd {
   }
 }
 
-@media (max-width: 520px) {
-  .screen-shop {
-    justify-items: stretch;
-    align-items: end;
-  }
-
-  /* Feuille basse, assez courte pour laisser voir la main essayée au-dessus */
-  .shop-panel {
-    max-height: 46%;
-    padding: 14px;
-    gap: 8px;
-  }
-
-  .shop-panel .map-sub {
-    font-size: 0.8rem;
-  }
-
+/* Panneau étroit (fenêtre moyenne) : bouton sous la description */
+@container (max-width: 400px) {
   .glove {
     grid-template-columns: 56px minmax(0, 1fr);
   }
@@ -1757,6 +1745,51 @@ kbd {
   .glove-action {
     grid-column: 1 / -1;
     justify-self: stretch;
+  }
+}
+
+@media (max-width: 520px) {
+  .screen-shop {
+    justify-items: stretch;
+    align-items: end;
+  }
+
+  /* Feuille basse, assez courte pour laisser voir la main essayée au-dessus. Cartes
+     compactes (sans description, bouton sur la ligne du nom) : plusieurs gants visibles. */
+  .shop-panel {
+    width: 100%;
+    max-height: 46%;
+    padding: 12px 14px;
+    gap: 8px;
+    container-type: normal;
+  }
+
+  .shop-panel .map-sub {
+    font-size: 0.8rem;
+  }
+
+  .shop-lead,
+  .glove-desc {
+    display: none;
+  }
+
+  .glove {
+    grid-template-columns: 48px minmax(0, 1fr) auto;
+    gap: 10px;
+    padding: 8px 10px;
+  }
+
+  .glove-art {
+    width: 48px;
+    height: 48px;
+  }
+
+  .glove-name {
+    font-size: 1rem;
+  }
+
+  .glove-action {
+    font-size: 0.8rem;
   }
 }
 

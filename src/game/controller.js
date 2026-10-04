@@ -53,8 +53,9 @@ export class GameController {
     Object.assign(this, { engine, tweens, world, player, bot, effects, hud, sfx, music, wallet });
     this.portraits = portraits;
     this.renderIcons = renderIcons;
-    this.wardrobe = new Wardrobe();
+    this.wardrobe = new Wardrobe({ wallet });
     this.gloveIcons = null;
+    this.cardIcons = new Map(); // icônes des cartes de coup, par gant (un rendu chacun)
     this.cardGloveId = null;
     this.state = 'boot';
     this.formatId = CONFIG.game.defaultFormat;
@@ -170,6 +171,8 @@ export class GameController {
     // pièces (setBalance avec bump) pour ne pas dévoiler le résultat en avance.
     wallet.subscribe((w) => {
       if (this.state !== 'resolving') this.hud.setBalance(w.balance);
+      // Solde ou achats changés (ici ou dans un autre onglet) : la boutique suit
+      if (this.state === 'shop') this.#renderShop(this.hud.focusedGlove());
     });
     hud.setFormats(CONFIG.game.formats);
     hud.setFormat(this.formatId);
@@ -221,28 +224,41 @@ export class GameController {
     const { wardrobe, progress, wallet, hud, sfx } = this;
     const glove = findGlove(id);
     if (!glove) return;
+    wardrobe.reload();
     const status = wardrobe.status(id, { progress, balance: wallet.balance });
     if (status === 'owned') {
       wardrobe.equip(id, progress);
       sfx.boost();
       hud.announce(`${glove.name} équipé`);
     } else if (status === 'buyable') {
-      const result = wardrobe.buy(id, wallet, progress);
+      const result = wardrobe.buy(id, progress);
       if (result.ok) {
         sfx.coin(0);
         sfx.coin(0.15);
         this.effects.celebrate(this.player.getFrontPosition(this._v).clone(), 60);
         hud.announce(`${glove.name} acheté et équipé`);
       } else if (result.reason === 'funds') {
-        hud.toast(`Il te manque ${glove.price - wallet.balance} ${SYMBOL} pour ${glove.name}.`);
+        this.#missingFunds(glove);
       }
+    } else if (status === 'tooExpensive') {
+      this.#missingFunds(glove);
+    } else if (status === 'locked') {
+      sfx.click();
+      hud.toast(`Bats ${glove.unlockName} dans la campagne pour gagner ce gant.`);
     }
     this.#applyGlove();
     this.#renderShop(id);
   }
 
+  #missingFunds(glove) {
+    const missing = Math.max(1, glove.price - this.wallet.balance);
+    this.sfx.click();
+    this.hud.toast(`Il te manque ${missing} ${SYMBOL} pour ${glove.name}.`);
+  }
+
   #renderShop(focusId = null) {
     const { wardrobe, progress, wallet } = this;
+    wardrobe.reload(); // un autre onglet a pu changer de gant
     // Icônes des gants rendues une seule fois, à la première ouverture
     this.gloveIcons ??= this.renderIcons(
       GLOVES.map((glove) => ({ key: glove.id, pose: 'paper', palette: glove.palette })),
@@ -270,9 +286,11 @@ export class GameController {
     this.player.setPalette(glove.palette);
     if (glove.id === this.cardGloveId) return;
     this.cardGloveId = glove.id;
-    this.hud.setCardArt(
-      this.renderIcons(MOVES.map((move) => ({ key: move, pose: move, palette: glove.palette }))),
-    );
+    if (!this.cardIcons.has(glove.id)) {
+      const requests = MOVES.map((move) => ({ key: move, pose: move, palette: glove.palette }));
+      this.cardIcons.set(glove.id, this.renderIcons(requests));
+    }
+    this.hud.setCardArt(this.cardIcons.get(glove.id));
   }
 
   // --- Navigation ---------------------------------------------------------------

@@ -125,39 +125,43 @@ export function findGlove(id) {
 }
 
 /**
- * Garde-robe du joueur : gants possédés et gant équipé. Comme le reste des
- * sauvegardes, elle relit le stockage avant d'écrire (plusieurs onglets) et
- * garde un état en mémoire si le stockage est indisponible.
+ * Garde-robe du joueur : quels gants il possède, lequel est équipé.
+ *  - les achats sont enregistrés par le portefeuille, dans la même écriture que le
+ *    débit (on ne peut pas payer sans recevoir le gant, ni l'inverse) ;
+ *  - les trophées découlent de la progression de campagne ;
+ *  - seul le gant équipé est sauvegardé ici. Si cette écriture échoue (stockage plein),
+ *    le choix fait dans cet onglet est gardé en mémoire au lieu d'être écrasé à la
+ *    relecture suivante.
  */
 export class Wardrobe {
-  constructor({ storage = safeStorage(), key = 'pfc:wardrobe' } = {}) {
+  #unsaved = false;
+
+  constructor({ wallet, storage = safeStorage(), key = 'pfc:wardrobe' } = {}) {
+    this.wallet = wallet;
     this.storage = storage;
     this.key = key;
-    this.owned = new Set([DEFAULT_GLOVE]);
     this.equipped = DEFAULT_GLOVE;
     this.reload();
   }
 
   reload() {
+    if (this.#unsaved) return;
     const saved = readJSON(this.key, null, this.storage);
-    if (Array.isArray(saved?.owned)) {
-      for (const id of saved.owned) if (findGlove(id)?.kind === 'shop') this.owned.add(id);
-    }
     if (typeof saved?.equipped === 'string' && findGlove(saved.equipped)) {
       this.equipped = saved.equipped;
     }
   }
 
   #save() {
-    writeJSON(this.key, { owned: [...this.owned], equipped: this.equipped }, this.storage);
+    this.#unsaved = !writeJSON(this.key, { equipped: this.equipped }, this.storage);
   }
 
-  /** Possédé : acheté, ou trophée d'une île libérée (progress : CampaignProgress). */
+  /** Possédé : gant de départ, acheté, ou trophée d'une île libérée (progress : CampaignProgress). */
   isOwned(id, progress) {
     const glove = findGlove(id);
     if (!glove) return false;
     if (glove.kind === 'trophy') return Boolean(progress?.isCleared(glove.unlock));
-    return this.owned.has(id);
+    return id === DEFAULT_GLOVE || Boolean(this.wallet?.owns(id));
   }
 
   /** Gant équipé, retombant sur le classique s'il n'est plus valable (trophée non débloqué…). */
@@ -179,17 +183,19 @@ export class Wardrobe {
   }
 
   /**
-   * Achète un gant de la boutique. Retourne { ok, reason }.
+   * Achète un gant de la boutique et l'équipe. Retourne { ok, reason }.
    * reason : 'unknown' | 'owned' | 'notForSale' | 'funds'
    */
-  buy(id, wallet, progress) {
+  buy(id, progress) {
     this.reload();
     const glove = findGlove(id);
     if (!glove) return { ok: false, reason: 'unknown' };
     if (this.isOwned(id, progress)) return { ok: false, reason: 'owned' };
     if (glove.kind !== 'shop') return { ok: false, reason: 'notForSale' };
-    if (!wallet.spend(glove.price, `Achat : ${glove.name}`)) return { ok: false, reason: 'funds' };
-    this.owned.add(id);
+    if (!this.wallet.spend(glove.price, `Achat : ${glove.name}`, { item: id })) {
+      // Refus : solde insuffisant, ou gant acheté entre-temps dans un autre onglet
+      return { ok: false, reason: this.wallet.owns(id) ? 'owned' : 'funds' };
+    }
     this.equipped = id;
     this.#save();
     return { ok: true };

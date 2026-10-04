@@ -135,6 +135,8 @@ export class Hud {
     }
     // Boutique : action sur un gant, et essayage au survol ou au focus
     el.shopList.addEventListener('click', (event) => {
+      // Les gants trop chers ou verrouillés restent cliquables (aria-disabled) : le
+      // contrôleur explique ce qu'il manque
       const action = event.target.closest('.glove-action');
       if (action && !action.disabled) this.#emit('shopAction', action.dataset.id);
     });
@@ -383,7 +385,12 @@ export class Hud {
           locked: `Bats ${glove.unlockName}`,
         }[status];
         action.textContent = label;
-        action.disabled = ['equipped', 'tooExpensive', 'locked'].includes(status);
+        // Seul le gant équipé est vraiment désactivé : les autres restent atteignables au
+        // clavier (Tab), pour les essayer et entendre pourquoi ils ne sont pas disponibles
+        action.disabled = status === 'equipped';
+        if (status === 'tooExpensive' || status === 'locked') {
+          action.setAttribute('aria-disabled', 'true');
+        }
         action.classList.add(status === 'buyable' ? 'btn-primary' : 'btn-ghost');
         action.setAttribute('aria-label', `${glove.name} : ${label}`);
         item.append(art, info, action);
@@ -396,13 +403,25 @@ export class Hud {
     // Le rendu remplace la liste : on rend le focus au gant concerné
     if (!focusId) return;
     const item = el.shopList.querySelector(`.glove[data-id="${focusId}"]`);
-    const button = item?.querySelector('.glove-action');
+    if (!item) return;
+    const button = item.querySelector('.glove-action');
     if (button && !button.disabled) {
       button.focus({ preventScroll: true });
-    } else if (item) {
+    } else {
       item.tabIndex = -1;
       item.focus({ preventScroll: true });
     }
+    // Défilement de la liste seule (preventScroll évite de décaler toute la page)
+    const box = el.shopList.getBoundingClientRect();
+    const rect = item.getBoundingClientRect();
+    if (rect.top < box.top) el.shopList.scrollTop += rect.top - box.top - 6;
+    else if (rect.bottom > box.bottom) el.shopList.scrollTop += rect.bottom - box.bottom + 6;
+  }
+
+  /** Gant qui a le focus clavier dans la boutique (pour le lui rendre après un nouveau rendu). */
+  focusedGlove() {
+    const glove = document.activeElement?.closest?.('#shop-list .glove');
+    return glove?.dataset.id ?? null;
   }
 
   // --- Choix des atouts avant le match ---
